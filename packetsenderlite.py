@@ -116,7 +116,7 @@ def load_python_generator_payloads(path_to_module: str,
 
 
 def create_target_tcp_protocol(ip_str: str,
-                               settings: dict) -> Iterator[NamedTuple, None, None]:
+                               settings: dict) -> Iterator:
     """
     На основании ip адреса и настроек возвращает через yield
     экзэмпляр namedtuple - Target.
@@ -327,7 +327,7 @@ async def worker_single(target: NamedTuple) -> dict:
     try:
         reader, writer = await asyncio.wait_for(future_connection, timeout=target.timeout_connection)
     except Exception as e:
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.02)
         future_connection.close()
         del future_connection
         result = create_template_error(target, str(e))
@@ -349,7 +349,7 @@ async def worker_single(target: NamedTuple) -> dict:
                     # TODO: добавить статус success-not-contain
                     # TODO: для обозначения того, что сервис найдет, но не попал под фильтр
                     pass
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.02)
             try:
                 writer.close()
             except:
@@ -357,7 +357,7 @@ async def worker_single(target: NamedTuple) -> dict:
         except Exception as e:
             result = create_template_error(target, str(e))
             future_connection.close()
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.02)
             try:
                 writer.close()
             except:
@@ -390,7 +390,7 @@ async def worker_group(block: List[NamedTuple]) -> None:
     timeouts = len(block)*time_out_for_connection   #  TODO:
     async with async_timeout.timeout(timeouts):
         responses = await asyncio.gather(*tasks)
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.02)
     if responses:
         method_write_result = write_to_stdout
         if mode_write == 'a':
@@ -449,7 +449,7 @@ async def work_with_queue(queue_results: asyncio.Queue,
                 await worker_group(block)
                 del block
                 block = []
-                await asyncio.sleep(0.01)  # magic number :)
+                await asyncio.sleep(0.02)  # magic number :)
 
     if block:
         await worker_group(block)
@@ -556,6 +556,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Packet sender lite(asyncio)')
     parser.add_argument("-settings", type=str, help="path to file with settings(yaml)")
 
+    parser.add_argument('--use-uvloop', dest='uvloop', action='store_true')
+
     parser.add_argument("-f", "--input-file", dest='input_file', type=str, help="path to file with targets")
 
     parser.add_argument("-o", "--output-file", dest='output_file', type=str, help="path to file with results")
@@ -578,7 +580,6 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", type=int, help='Specify port (default: 80)')
 
     parser.add_argument('--use-ssl', dest='sslcheck', action='store_true')
-    parser.add_argument('--no-use-ssl', dest='sslcheck', action='store_false')
 
     parser.add_argument("--single-contain", dest='single_contain', type=str,
                         help='trying to find a substring in a response(set in base64)')
@@ -592,6 +593,9 @@ if __name__ == "__main__":
     parser.add_argument("--single-payload", dest='single_payload', type=str,
                         help='single payload in BASE64 from bytes')
 
+    parser.add_argument("--single-payload-hex", dest='single_payload_hex', type=str,
+                        help='single payload in hex(bytes)')
+
     parser.add_argument("--python-payloads", dest='python_payloads', type=str,
                         help='path to Python module')
 
@@ -599,7 +603,6 @@ if __name__ == "__main__":
                         help='name function of gen.payloads from Python module')
 
     parser.add_argument('--show-statistics', dest='statistics', action='store_true')
-    parser.add_argument('--no-show-statistics', dest='statistics', action='store_false')
 
     path_to_file_targets = None  # set default None to inputfile
     args = parser.parse_args()
@@ -650,11 +653,17 @@ if __name__ == "__main__":
                 print('errors with --single-contain-string options')
                 exit(1)
 
-
+        single_payload = None
         if args.single_payload:
             single_payload = return_bytes_from_single_payload(args.single_payload)
-            if single_payload:
-                payloads.append(single_payload)
+        elif args.single_payload_hex:
+            try:
+                single_payload = bytes.fromhex(args.single_payload_hex)
+            except:
+                pass
+        if single_payload:
+            payloads.append(single_payload)
+
     time_out_for_connection = args.timeout_connection + 1  # TODO: rethink
     settings = {'port': args.port,
                 'sslcheck': args.sslcheck,
@@ -674,6 +683,9 @@ if __name__ == "__main__":
     count_good = 0
     count_error = 0
     start_time = datetime.datetime.now()
+    if args.uvloop:
+        import uvloop
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     loop = asyncio.get_event_loop()
     queue_results = asyncio.Queue()
 
