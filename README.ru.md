@@ -1,8 +1,8 @@
-# Scanner banner
+# Packet Sender Lite
 Еще один сканер(граббер) баннеров сетевых сервисов.
 
 ###### Ключевые моменты:
-1. Python asyncio (python3.8)
+1. Python asyncio, uvloop (python3.8)
 2. Возможно задавать программно-генерируемые(Python) payloads
 
 

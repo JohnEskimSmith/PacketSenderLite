@@ -585,6 +585,9 @@ if __name__ == "__main__":
     parser.add_argument("--single-contain", dest='single_contain', type=str,
                         help='trying to find a substring in a response(set in base64)')
 
+    parser.add_argument("--single-contain-hex", dest='single_contain_hex', type=str,
+                        help='trying to find a substring in a response bytes (set in bytes(hex))')
+
     parser.add_argument("--single-contain-string", dest='single_contain_string', type=str,
                         help='trying to find a substring in a response(set in str)')
 
@@ -652,6 +655,14 @@ if __name__ == "__main__":
                 search_values.append(search_value)
             except Exception as e:
                 print('errors with --single-contain-string options')
+                exit(1)
+        elif args.single_contain_hex:
+            try:
+                search_value = bytes.fromhex(args.single_contain_hex)
+                assert search_value is not None
+                search_values.append(search_value)
+            except Exception as e:
+                print('errors with --single-contain-hex options')
                 exit(1)
 
         single_payload = None
