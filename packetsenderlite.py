@@ -20,6 +20,9 @@ import copy
 from os import path
 import importlib
 import async_timeout
+import uvloop
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
 from typing import (Any,
                     Callable,
                     Iterable,
@@ -556,8 +559,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Packet sender lite(asyncio)')
     parser.add_argument("-settings", type=str, help="path to file with settings(yaml)")
 
-    parser.add_argument('--use-uvloop', dest='uvloop', action='store_true')
-
     parser.add_argument("-f", "--input-file", dest='input_file', type=str, help="path to file with targets")
 
     parser.add_argument("-o", "--output-file", dest='output_file', type=str, help="path to file with results")
@@ -683,9 +684,7 @@ if __name__ == "__main__":
     count_good = 0
     count_error = 0
     start_time = datetime.datetime.now()
-    if args.uvloop:
-        import uvloop
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
     loop = asyncio.get_event_loop()
     queue_results = asyncio.Queue()
 
