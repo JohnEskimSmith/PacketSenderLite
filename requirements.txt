@@ -1,0 +1,5 @@
+aioconsole==0.2.1
+ujson==1.35
+async_timeout==3.0.1
+hexdump==3.3
+aiofiles==0.5.0
