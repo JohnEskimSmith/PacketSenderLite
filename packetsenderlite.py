@@ -20,6 +20,8 @@ import copy
 from os import path
 import importlib
 import async_timeout
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
 import uvloop
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -184,7 +186,7 @@ def create_targets_tcp_protocol(ip_str: str,
             yield target
 
 
-def create_template_struct() -> dict:
+def create_template_struct(target: NamedTuple) -> dict:
     """
     вспомогательная функция, создает шаблон словаря заданной в коде структуры
     :return:
@@ -194,12 +196,22 @@ def create_template_struct() -> dict:
                        {'status': 'tcp',
                         'result':
                             {'response':
-                                {
+                                {'request': {}
                                 }
                             }
                        }
                   }
               }
+    if target.sslcheck:
+        _tls_log = {'tls_log':
+                        {'handshake_log':
+                             {'server_certificates':
+                                  {'certificate': {'parsed': {},
+                                                   'raw': ''}}
+                              }
+                         }
+                    }
+        result['data']['tcp']['result']['response']['request'].update(_tls_log)
     return result
 
 
@@ -243,7 +255,7 @@ def make_document_from_response(buffer: bytes,
         return json_record
 
 
-    _default_record = create_template_struct()
+    _default_record = create_template_struct(target)
     _default_record['data']['tcp']['status'] = "success"
     _default_record['data']['tcp']['result']['response']['content_length'] = len(buffer)
     # _default_record['data']['tcp']['result']['response']['body'] = ''
@@ -312,6 +324,111 @@ def filter_bytes(buffer: bytes,
         return any(checks)
 
 
+def convert_bytes_to_cert(bytes_cert):
+    cert = None
+    try:
+        cert = x509.load_der_x509_certificate(bytes_cert, default_backend())
+    except:
+        try:
+            cert = x509.load_pem_x509_certificate(bytes_cert, default_backend())
+        except:
+            pass
+
+    if cert:
+        try:
+            alg_hash_name = cert.signature_hash_algorithm.name
+            alg_hash = cert.signature_hash_algorithm
+            tp = cert.fingerprint(alg_hash)
+            alg_hash_value = ''.join('{:02x}'.format(x) for x in tp)
+        except:
+            pass
+
+
+        # region block not used
+        # signature_hash_algorithm = cert.signature_hash_algorithm
+        # subject = cert.subject
+        # not_valid_after = cert.not_valid_after
+        # alg_hash = cert.signature_hash_algorithm
+        # tp = cert.fingerprint(alg_hash)
+        # alg_hash_value = ''.join('{:02x}'.format(x) for x in tp)
+        # endregion
+
+        result = {}
+        serial_number = cert.serial_number
+        issuer = cert.issuer
+        try:
+            result['validity'] = {}
+            result['validity']['end_datetime'] = cert.not_valid_after
+            result['validity']['start_datetime'] = cert.not_valid_before
+            result['validity']['end'] = result['validity']['end_datetime'].strftime('%Y-%m-%dT%H:%M:%SZ')
+            result['validity']['start'] = result['validity']['start_datetime'].strftime('%Y-%m-%dT%H:%M:%SZ')
+        except Exception as e:
+            pass
+        result['issuer'] = {}
+        dict_replace = {'countryName': 'country',
+                        'organizationName': 'organization',
+                        'commonName': 'common_name'}
+        try:
+            for n in issuer.rdns:
+                z = n._attributes[0]
+                name_k = z.oid._name
+                value = z.value
+                if name_k in dict_replace:
+                    result['issuer'][dict_replace[name_k]] = [value]
+        except Exception as e:
+            pass
+        try:
+            if 'v' in cert.version.name:
+                result['version'] = cert.version.name.split('v')[1].strip()
+        except:
+            result['version'] = str(cert.version.value)
+        dnss = get_certificate_domains(cert)
+        atr = cert.subject._attributes
+        result['subject'] = {}
+        for i in atr:
+            for q in i._attributes:
+                result['subject'][q.oid._name] = [q.value]
+        if 'serialNumber' in list(result.keys()):
+            if len(result['serialNumber']) == 16:
+                result['serialNumber'] = '00' + result['serialNumber']
+        try:
+            result['serialNumber_int'] = int('0x' + result['serialNumber'], 16)
+            result['serial_number'] = str(result['serialNumber_int'])
+        except:
+            result['serialNumber_int'] = 0
+        result['names'] = dnss
+        if result['serialNumber_int'] == 0:
+            result['serial_number'] = str(serial_number)
+            result['serial_number_hex'] = str(hex(serial_number))
+        result['raw_serial'] = str(serial_number)
+        # result['fingerprint_sha256'] = alg_hash_value
+        hashs = {'fingerprint_sha256': sha256,
+                 'fingerprint_sha1': sha1,
+                 'fingerprint_md5': md5
+                 }
+        for namehash, func in hashs.items():
+            hm = func()
+            hm.update(bytes_cert)
+            result[namehash] = hm.hexdigest()
+        remove_keys = ['serialNumber_int']
+        for key in remove_keys:
+            result.pop(key)
+        return result
+
+
+def get_certificate_domains(cert):
+    """
+    Gets a list of all Subject Alternative Names in the specified certificate.
+    """
+    try:
+        for ext in cert.extensions:
+            ext = ext.value
+            if isinstance(ext, x509.SubjectAlternativeName):
+                return ext.get_values_for_type(x509.DNSName)
+    except:
+        return []
+
+
 async def worker_single(target: NamedTuple) -> dict:
     """
     сопрограмма, осуществляет подключение к Target,
@@ -320,6 +437,9 @@ async def worker_single(target: NamedTuple) -> dict:
     :return:
     """
     result = None
+    certificate_dict = None
+    cert_bytes_base64 = None
+
     if target.sslcheck:  # если при запуске в настройках указано --use-ssl - то контекст ssl
         ssl_context = ssl._create_unverified_context()
         future_connection = asyncio.open_connection(
@@ -329,6 +449,14 @@ async def worker_single(target: NamedTuple) -> dict:
             target.ip, target.port)
     try:
         reader, writer = await asyncio.wait_for(future_connection, timeout=target.timeout_connection)
+        if target.sslcheck:
+            try:
+                _sub_ssl = writer._transport.get_extra_info('ssl_object')
+                cert_bytes = _sub_ssl.getpeercert(binary_form=True)
+                cert_bytes_base64 = base64.standard_b64encode(cert_bytes).decode('utf-8')
+                certificate_dict = convert_bytes_to_cert(cert_bytes)
+            except:
+                pass
     except Exception as e:
         await asyncio.sleep(0.02)
         future_connection.close()
@@ -348,6 +476,15 @@ async def worker_single(target: NamedTuple) -> dict:
                 check_filter = filter_bytes(data, target)
                 if check_filter:
                     result = make_document_from_response(data, target)  # создать результат
+                    if target.sslcheck:
+                        if cert_bytes_base64:
+                            result['data']['tcp']['result']['response']['request']['tls_log']['handshake_log'][
+                            'server_certificates']['certificate']['raw'] = cert_bytes_base64
+                        if certificate_dict:
+                            result['data']['tcp']['result']['response']['request']['tls_log'][
+                                'handshake_log'][
+                                'server_certificates']['certificate']['parsed'] = certificate_dict
+
                 else:
                     # TODO: добавить статус success-not-contain
                     # TODO: для обозначения того, что сервис найдет, но не попал под фильтр
@@ -707,9 +844,12 @@ if __name__ == "__main__":
     stop_time = datetime.datetime.now()
     _delta_time = stop_time - start_time
     duration_time_sec = _delta_time.total_seconds()
+
+    # region dev
     if args.statistics:
         statistics = {'duration': duration_time_sec,
                       'valid targets': count_input,
                       'success': count_good,
                       'fails': count_error}
         print(ujson.dumps(statistics))
+    # endregion
