@@ -23,7 +23,6 @@ import async_timeout
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 import uvloop
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 from typing import (Any,
                     Callable,
@@ -554,7 +553,18 @@ async def worker_group(block: List[NamedTuple]) -> None:
                         pass
                     if line:
                         await method_write_result(file_with_results, line)
-
+    # region dev
+    if args.statistics:
+        stop_time = datetime.datetime.now()
+        _delta_time = stop_time - start_time
+        duration_time_sec = _delta_time.total_seconds()
+        statistics = {'duration': duration_time_sec,
+                      'valid targets': count_input,
+                      'success': count_good,
+                      'fails': count_error}
+        async with aiofiles.open('/dev/stdout', mode='wb') as stats:
+            await stats.write(ujson.dumps(statistics).encode('utf-8') + b'\n')
+    # endregion
 
 async def write_to_stdout(object_file: BinaryIO,
                           record_str: str):
@@ -796,6 +806,7 @@ if __name__ == "__main__":
                 assert search_value is not None
                 search_values.append(search_value)
             except Exception as e:
+                print(e)
                 print('errors with --single-contain options')
                 exit(1)
         elif args.single_contain_string:
@@ -804,6 +815,7 @@ if __name__ == "__main__":
                 assert search_value is not None
                 search_values.append(search_value)
             except Exception as e:
+                print(e)
                 print('errors with --single-contain-string options')
                 exit(1)
         elif args.single_contain_hex:
@@ -812,6 +824,7 @@ if __name__ == "__main__":
                 assert search_value is not None
                 search_values.append(search_value)
             except Exception as e:
+                print(e)
                 print('errors with --single-contain-hex options')
                 exit(1)
 
@@ -845,24 +858,10 @@ if __name__ == "__main__":
     count_good = 0
     count_error = 0
     start_time = datetime.datetime.now()
-
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     loop = asyncio.get_event_loop()
     queue_results = asyncio.Queue()
-
     producer_coro = method_create_targets(queue_results, settings, path_to_file_targets)
     consumer_coro = work_with_queue(queue_results, count_cor)
     loop.run_until_complete(asyncio.gather(producer_coro, consumer_coro))
     loop.close()
-
-    stop_time = datetime.datetime.now()
-    _delta_time = stop_time - start_time
-    duration_time_sec = _delta_time.total_seconds()
-
-    # region dev
-    if args.statistics:
-        statistics = {'duration': duration_time_sec,
-                      'valid targets': count_input,
-                      'success': count_good,
-                      'fails': count_error}
-        print(ujson.dumps(statistics))
-    # endregion
