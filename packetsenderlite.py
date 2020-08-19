@@ -125,7 +125,7 @@ def create_target_tcp_protocol(ip_str: str,
     """
     На основании ip адреса и настроек возвращает через yield
     экзэмпляр namedtuple - Target.
-    Target содержит всю информацию необходимую для worker.
+    Каждый экземпляр Target содержит всю необходимую информацию(настройки и параметры) для функции worker.
     :param ip_str:
     :param settings:
     :return:
@@ -543,8 +543,17 @@ async def worker_group(block: List[NamedTuple]) -> None:
                         count_good += 1
                     else:
                         count_error += 1
-                    line = ujson.dumps(dict_line)
-                    await method_write_result(file_with_results, line)
+                    line = None
+                    try:
+                        if args.show_only_success:
+                            if success == "success":
+                                line = ujson.dumps(dict_line)
+                        else:
+                            line = ujson.dumps(dict_line)
+                    except Exception as e:
+                        pass
+                    if line:
+                        await method_write_result(file_with_results, line)
 
 
 async def write_to_stdout(object_file: BinaryIO,
@@ -713,12 +722,13 @@ if __name__ == "__main__":
                         default=3, help='Set connection timeout for reader from connection (default: 3)')
 
     parser.add_argument("-tssl", "--timeout-ssl", dest='timeout_ssl', type=int,
-                        default=3, help='Set connection timeout for reader from connection (default: 3)')
+                        default=3, help='Set connection timeout for reader from ssl connection (default: 3)')
 
     parser.add_argument("-p", "--port", type=int, help='Specify port (default: 80)')
 
     parser.add_argument('--use-ssl', dest='sslcheck', action='store_true')
 
+    # region filters
     parser.add_argument("--single-contain", dest='single_contain', type=str,
                         help='trying to find a substring in a response(set in base64)')
 
@@ -727,6 +737,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--single-contain-string", dest='single_contain_string', type=str,
                         help='trying to find a substring in a response(set in str)')
+
+    parser.add_argument('--show-only-success', dest='show_only_success', action='store_true')
+    # endregion
 
     parser.add_argument('--list-payloads', nargs='*', dest='list_payloads',
                         help='list payloads(bytes stored in files): file1 file2 file2', required=False)
