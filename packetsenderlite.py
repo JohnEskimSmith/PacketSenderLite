@@ -553,18 +553,7 @@ async def worker_group(block: List[NamedTuple]) -> None:
                         pass
                     if line:
                         await method_write_result(file_with_results, line)
-    # region dev
-    if args.statistics:
-        stop_time = datetime.datetime.now()
-        _delta_time = stop_time - start_time
-        duration_time_sec = _delta_time.total_seconds()
-        statistics = {'duration': duration_time_sec,
-                      'valid targets': count_input,
-                      'success': count_good,
-                      'fails': count_error}
-        async with aiofiles.open('/dev/stdout', mode='wb') as stats:
-            await stats.write(ujson.dumps(statistics).encode('utf-8') + b'\n')
-    # endregion
+
 
 async def write_to_stdout(object_file: BinaryIO,
                           record_str: str):
@@ -612,6 +601,18 @@ async def work_with_queue(queue_results: asyncio.Queue,
 
     if block:
         await worker_group(block)
+    # region dev
+    if args.statistics:
+        stop_time = datetime.datetime.now()
+        _delta_time = stop_time - start_time
+        duration_time_sec = _delta_time.total_seconds()
+        statistics = {'duration': duration_time_sec,
+                      'valid targets': count_input,
+                      'success': count_good,
+                      'fails': count_error}
+        async with aiofiles.open('/dev/stdout', mode='wb') as stats:
+            await stats.write(ujson.dumps(statistics).encode('utf-8') + b'\n')
+    # endregion
 
 
 async def read_input_file(queue_results: asyncio.Queue,
