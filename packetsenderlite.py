@@ -19,7 +19,6 @@ import aiofiles
 import copy
 from os import path
 import importlib
-import async_timeout
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 import uvloop
@@ -430,7 +429,7 @@ def get_certificate_domains(cert):
 
 async def worker_single(target: NamedTuple,
                         semaphore: asyncio.Semaphore,
-                        object_writer) -> dict:
+                        queue_out: asyncio.Queue) -> dict:
     """
     сопрограмма, осуществляет подключение к Target,
     отправку и прием данных, формирует результата в виде dict
@@ -463,7 +462,7 @@ async def worker_single(target: NamedTuple,
                 except:
                     pass
         except Exception as e:
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0.005)
             future_connection.close()
             del future_connection
             result = create_template_error(target, str(e))
@@ -494,7 +493,7 @@ async def worker_single(target: NamedTuple,
                         # TODO: добавить статус success-not-contain
                         # TODO: для обозначения того, что сервис найдет, но не попал под фильтр
                         pass
-                    await asyncio.sleep(0.001)
+                    await asyncio.sleep(0.005)
                 try:
                     writer.close()
                 except:
@@ -502,7 +501,7 @@ async def worker_single(target: NamedTuple,
             except Exception as e:
                 result = create_template_error(target, str(e))
                 future_connection.close()
-                await asyncio.sleep(0.001)
+                await asyncio.sleep(0.005)
                 try:
                     writer.close()
                 except:
@@ -523,71 +522,99 @@ async def worker_single(target: NamedTuple,
             except Exception as e:
                 pass
             if line:
-                async with aiofiles.open(output_file, mode=mode_write) as file_out:
-                    await object_writer(file_out, line)
+                await queue_out.put(line)
 
 
 async def write_to_stdout(object_file: BinaryIO,
                           record_str: str):
+    """
+    write in 'wb' mode to object_file, input string in utf-8
+    :param object_file:
+    :param record_str:
+    :return:
+    """
     await object_file.write(record_str.encode('utf-8') + b'\n')
 
 
 async def write_to_file(object_file: TextIO,
                         record_str: str):
+    """
+    write in 'text' mode to object_file
+    :param object_file:
+    :param record_str:
+    :return:
+    """
     await object_file.write(record_str + '\n')
 
 
 async def work_with_queue(queue_with_input: asyncio.Queue,
                           queue_with_tasks: asyncio.Queue,
+                          queue_out: asyncio.Queue,
                           count: int) -> None:
-
     """
-     - queue_results - очередь, в которую попадают цели типа NamedTuple - target
-     - count - количество целей, которые за 1 раз будут "паралелльно"(асинхронно) исполняться
-    концепт функции простой:
-    1. чтение из очереди queue_results элемента
-    2. при наличии элемента помещение его в список block
-    3. при достижении длины списка block равной count вызывает worker_group
-    4. внутри worker_group отрабатывают "сопрограммы"
-    5. список block удаляется создается
-    6. в завершении функции идет проверка не пустой ли список, и вызывает worker_group на остатках целей
-    :param queue_input:
-    :param queue_results:
+
+    :param queue_with_input:
+    :param queue_with_tasks:
+    :param queue_out:
     :param count:
     :return:
     """
     semaphore = asyncio.Semaphore(count)
-    if mode_write == 'a':
-        method_write_result = write_to_file
-    else:
-        method_write_result = write_to_stdout
-    # async with aiofiles.open(output_file, mode=mode_write) as file_with_results:
-
     while True:
         # wait for an item from the "start_application"
         item = await queue_with_input.get()
         if item == b"check for end":
-            # TODO send statistics
             await queue_with_tasks.put(b"check for end")
             break
         if item:
-            task = asyncio.create_task(worker_single(item, semaphore, method_write_result))
+            task = asyncio.create_task(worker_single(item, semaphore, queue_out))
             await queue_with_tasks.put(task)
 
 
-async def work_with_queue_tasks(queue_results) -> None:
+async def work_with_queue_tasks(queue_results,
+                                queue_prints) -> None:
+    """
+
+    :param queue_results:
+    :param queue_prints:
+    :return:
+    """
     while True:
         # wait for an item from the "start_application"
         task = await queue_results.get()
         if task == b"check for end":
-            # TODO send statistics
+            await queue_prints.put(b"check for end")
             break
         if task:
             await task
 
-    global count_input
-    global count_good
-    global count_error
+    # global count_input
+    # global count_good
+    # global count_error
+
+
+async def work_with_queue_result(queue_out: asyncio.Queue,
+                                 filename,
+                                 mode_write) -> None:
+    """
+
+    :param queue_out:
+    :param filename:
+    :param mode_write:
+    :return:
+    """
+    if mode_write == 'a':
+        method_write_result = write_to_file
+    else:
+        method_write_result = write_to_stdout
+    async with aiofiles.open(filename, mode=mode_write) as file_with_results:
+        while True:
+            line = await queue_out.get()
+            if line == b"check for end":
+                break
+            if line:
+                await method_write_result(file_with_results, line)
+    await asyncio.sleep(0.5)
     # region dev
     if args.statistics:
         stop_time = datetime.datetime.now()
@@ -624,7 +651,7 @@ async def read_input_file(queue_input: asyncio.Queue,
                     for target in targets:
                         count_input += 1  # statistics
                         queue_input.put_nowait(target)
-    queue_input.put_nowait(b"check for end")
+    await queue_input.put(b"check for end")
 
 
 async def read_input_stdin(queue_input: asyncio.Queue,
@@ -652,7 +679,7 @@ async def read_input_stdin(queue_input: asyncio.Queue,
                         count_input += 1
                         queue_input.put_nowait(target)
         except EOFError:
-            queue_input.put_nowait(b"check for end")
+            await queue_input.put(b"check for end")
             break
 
 
@@ -850,8 +877,10 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     queue_input = asyncio.Queue()
     queue_results = asyncio.Queue()
-    producer_coro = method_create_targets(queue_input, settings, path_to_file_targets) # create targets
-    consumer_coro = work_with_queue(queue_input, queue_results, count_cor) # execution
-    consumer_out = work_with_queue_tasks(queue_results)
-    loop.run_until_complete(asyncio.gather(producer_coro, consumer_coro, consumer_out))
+    queue_prints = asyncio.Queue()
+    read_input = method_create_targets(queue_input, settings, path_to_file_targets) # create targets
+    create_tasks = work_with_queue(queue_input, queue_results, queue_prints, count_cor) # execution
+    execute_tasks = work_with_queue_tasks(queue_results, queue_prints)
+    print_output = work_with_queue_result(queue_prints, output_file, mode_write)
+    loop.run_until_complete(asyncio.gather(read_input, create_tasks, execute_tasks, print_output))
     loop.close()
