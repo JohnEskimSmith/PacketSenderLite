@@ -19,7 +19,6 @@ import aiofiles
 import copy
 from os import path
 import importlib
-import async_timeout
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 import uvloop
@@ -428,179 +427,194 @@ def get_certificate_domains(cert):
         return []
 
 
-async def worker_single(target: NamedTuple) -> dict:
+async def worker_single(target: NamedTuple,
+                        semaphore: asyncio.Semaphore,
+                        queue_out: asyncio.Queue) -> dict:
     """
     сопрограмма, осуществляет подключение к Target,
     отправку и прием данных, формирует результата в виде dict
     :param target:
+    :param semaphore:
     :return:
     """
-    result = None
-    certificate_dict = None
-    cert_bytes_base64 = None
+    global count_good
+    global count_error
+    async with semaphore:
+        result = None
+        certificate_dict = None
+        cert_bytes_base64 = None
 
-    if target.sslcheck:  # если при запуске в настройках указано --use-ssl - то контекст ssl
-        ssl_context = ssl._create_unverified_context()
-        future_connection = asyncio.open_connection(
-            target.ip, target.port, ssl=ssl_context, ssl_handshake_timeout=target.timeout_ssl)
-    else:
-        future_connection = asyncio.open_connection(
-            target.ip, target.port)
-    try:
-        reader, writer = await asyncio.wait_for(future_connection, timeout=target.timeout_connection)
-        if target.sslcheck:
-            try:
-                _sub_ssl = writer._transport.get_extra_info('ssl_object')
-                cert_bytes = _sub_ssl.getpeercert(binary_form=True)
-                cert_bytes_base64 = base64.standard_b64encode(cert_bytes).decode('utf-8')
-                certificate_dict = convert_bytes_to_cert(cert_bytes)
-            except:
-                pass
-    except Exception as e:
-        await asyncio.sleep(0.02)
-        future_connection.close()
-        del future_connection
-        result = create_template_error(target, str(e))
-    else:
+        if target.sslcheck:  # если при запуске в настройках указано --use-ssl - то контекст ssl
+            ssl_context = ssl._create_unverified_context()
+            future_connection = asyncio.open_connection(
+                target.ip, target.port, ssl=ssl_context, ssl_handshake_timeout=target.timeout_ssl)
+        else:
+            future_connection = asyncio.open_connection(
+                target.ip, target.port)
         try:
-            if target.payload:  # если указан payload - то он и отправляется в первую очередь
-                writer.write(target.payload)
-            future_reader = reader.read(target.max_size)
+            reader, writer = await asyncio.wait_for(future_connection, timeout=target.timeout_connection)
+            if target.sslcheck:
+                try:
+                    _sub_ssl = writer._transport.get_extra_info('ssl_object')
+                    cert_bytes = _sub_ssl.getpeercert(binary_form=True)
+                    cert_bytes_base64 = base64.standard_b64encode(cert_bytes).decode('utf-8')
+                    certificate_dict = convert_bytes_to_cert(cert_bytes)
+                except:
+                    pass
+        except Exception as e:
+            await asyncio.sleep(0.005)
+            future_connection.close()
+            del future_connection
+            result = create_template_error(target, str(e))
+        else:
             try:
-                # через asyncio.wait_for - задаем время на чтение из соединения
-                data = await asyncio.wait_for(future_reader, timeout=target.timeout_read)
+                if target.payload:  # если указан payload - то он и отправляется в первую очередь
+                    writer.write(target.payload)
+                future_reader = reader.read(target.max_size)
+                try:
+                    # через asyncio.wait_for - задаем время на чтение из соединения
+                    data = await asyncio.wait_for(future_reader, timeout=target.timeout_read)
+                except Exception as e:
+                    result = create_template_error(target, str(e))
+                else:
+                    check_filter = filter_bytes(data, target)
+                    if check_filter:
+                        result = make_document_from_response(data, target)  # создать результат
+                        if target.sslcheck:
+                            if cert_bytes_base64:
+                                result['data']['tcp']['result']['response']['request']['tls_log']['handshake_log'][
+                                'server_certificates']['certificate']['raw'] = cert_bytes_base64
+                            if certificate_dict:
+                                result['data']['tcp']['result']['response']['request']['tls_log'][
+                                    'handshake_log'][
+                                    'server_certificates']['certificate']['parsed'] = certificate_dict
+
+                    else:
+                        # TODO: добавить статус success-not-contain
+                        # TODO: для обозначения того, что сервис найдет, но не попал под фильтр
+                        pass
+                    await asyncio.sleep(0.005)
+                try:
+                    writer.close()
+                except:
+                    pass
             except Exception as e:
                 result = create_template_error(target, str(e))
-            else:
-                check_filter = filter_bytes(data, target)
-                if check_filter:
-                    result = make_document_from_response(data, target)  # создать результат
-                    if target.sslcheck:
-                        if cert_bytes_base64:
-                            result['data']['tcp']['result']['response']['request']['tls_log']['handshake_log'][
-                            'server_certificates']['certificate']['raw'] = cert_bytes_base64
-                        if certificate_dict:
-                            result['data']['tcp']['result']['response']['request']['tls_log'][
-                                'handshake_log'][
-                                'server_certificates']['certificate']['parsed'] = certificate_dict
-
-                else:
-                    # TODO: добавить статус success-not-contain
-                    # TODO: для обозначения того, что сервис найдет, но не попал под фильтр
+                future_connection.close()
+                await asyncio.sleep(0.005)
+                try:
+                    writer.close()
+                except:
                     pass
-                await asyncio.sleep(0.02)
+        if result:
+            success = return_value_from_dict(result, "data.tcp.status")
+            if success == "success":
+                count_good += 1
+            else:
+                count_error += 1
+            line = None
             try:
-                writer.close()
-            except:
-                pass
-        except Exception as e:
-            result = create_template_error(target, str(e))
-            future_connection.close()
-            await asyncio.sleep(0.02)
-            try:
-                writer.close()
-            except:
-                pass
-    return result
-
-
-async def worker_group(block: List[NamedTuple]) -> None:
-    """
-    block - содержит в списке цели(Target)
-    в цикле каждая цель отправляется в worker_single
-    который в свою очередь в список tasks
-    далее в контексте async_timeout.timeout(timeouts) с "глобальным" timeouts
-    ожидается исполенние всех сопрограмм в списке tasks
-    результаты(dict) записываются в responses - список
-    в контексте async with aiofiles.open('/dev/stdout', mode='wb')
-    в stdout пишется ujson.dumps(dict_line) - где dict_line как раз результат сопрограммы worker_single
-    используется модуль ujson - потому как быстрый, причем необходим версии 1.35
-    :param block:
-    :return:
-    """
-    global count_good  # счет удачных соединений(результатов)
-    global count_error # счет неудачных соединений(результатов)
-    tasks = []
-    responses = None
-
-    for target in block:
-        task = asyncio.ensure_future(worker_single(target))
-        tasks.append(task)
-    timeouts = len(block)*time_out_for_connection   #  TODO:
-    async with async_timeout.timeout(timeouts):
-        responses = await asyncio.gather(*tasks)
-    await asyncio.sleep(0.02)
-    if responses:
-        method_write_result = write_to_stdout
-        if mode_write == 'a':
-            method_write_result = write_to_file
-        async with aiofiles.open(output_file, mode=mode_write) as file_with_results:
-            for dict_line in responses:
-                if dict_line:
-                    success = return_value_from_dict(dict_line, "data.tcp.status")
+                if args.show_only_success:
                     if success == "success":
-                        count_good += 1
-                    else:
-                        count_error += 1
-                    line = None
-                    try:
-                        if args.show_only_success:
-                            if success == "success":
-                                line = ujson.dumps(dict_line)
-                        else:
-                            line = ujson.dumps(dict_line)
-                    except Exception as e:
-                        pass
-                    if line:
-                        await method_write_result(file_with_results, line)
+                        line = ujson.dumps(result)
+                else:
+                    line = ujson.dumps(result)
+            except Exception as e:
+                pass
+            if line:
+                await queue_out.put(line)
 
 
 async def write_to_stdout(object_file: BinaryIO,
                           record_str: str):
+    """
+    write in 'wb' mode to object_file, input string in utf-8
+    :param object_file:
+    :param record_str:
+    :return:
+    """
     await object_file.write(record_str.encode('utf-8') + b'\n')
 
 
 async def write_to_file(object_file: TextIO,
                         record_str: str):
+    """
+    write in 'text' mode to object_file
+    :param object_file:
+    :param record_str:
+    :return:
+    """
     await object_file.write(record_str + '\n')
 
 
-async def work_with_queue(queue_results: asyncio.Queue,
+async def work_with_queue(queue_with_input: asyncio.Queue,
+                          queue_with_tasks: asyncio.Queue,
+                          queue_out: asyncio.Queue,
                           count: int) -> None:
     """
-     - queue_results - очередь, в которую попадают цели типа NamedTuple - target
-     - count - количество целей, которые за 1 раз будут "паралелльно"(асинхронно) исполняться
-    концепт функции простой:
-    1. чтение из очереди queue_results элемента
-    2. при наличии элемента помещение его в список block
-    3. при достижении длины списка block равной count вызывает worker_group
-    4. внутри worker_group отрабатывают "сопрограммы"
-    5. список block удаляется создается
-    6. в завершении функции идет проверка не пустой ли список, и вызывает worker_group на остатках целей
-    :param queue_results:
+
+    :param queue_with_input:
+    :param queue_with_tasks:
+    :param queue_out:
     :param count:
     :return:
     """
-    count_elements = 0
-    block = []
-
+    semaphore = asyncio.Semaphore(count)
     while True:
         # wait for an item from the "start_application"
-        item = await queue_results.get()
+        item = await queue_with_input.get()
         if item == b"check for end":
-            # TODO send statistics
+            await queue_with_tasks.put(b"check for end")
             break
         if item:
-            block.append(item)
-            count_elements += 1
-            if count_elements % (int(count)) == 0:
-                await worker_group(block)
-                del block
-                block = []
-                await asyncio.sleep(0.02)  # magic number :)
+            task = asyncio.create_task(worker_single(item, semaphore, queue_out))
+            await queue_with_tasks.put(task)
 
-    if block:
-        await worker_group(block)
+
+async def work_with_queue_tasks(queue_results,
+                                queue_prints) -> None:
+    """
+
+    :param queue_results:
+    :param queue_prints:
+    :return:
+    """
+    while True:
+        # wait for an item from the "start_application"
+        task = await queue_results.get()
+        if task == b"check for end":
+            await queue_prints.put(b"check for end")
+            break
+        if task:
+            await task
+
+    # global count_input
+    # global count_good
+    # global count_error
+
+
+async def work_with_queue_result(queue_out: asyncio.Queue,
+                                 filename,
+                                 mode_write) -> None:
+    """
+
+    :param queue_out:
+    :param filename:
+    :param mode_write:
+    :return:
+    """
+    if mode_write == 'a':
+        method_write_result = write_to_file
+    else:
+        method_write_result = write_to_stdout
+    async with aiofiles.open(filename, mode=mode_write) as file_with_results:
+        while True:
+            line = await queue_out.get()
+            if line == b"check for end":
+                break
+            if line:
+                await method_write_result(file_with_results, line)
+    await asyncio.sleep(0.5)
     # region dev
     if args.statistics:
         stop_time = datetime.datetime.now()
@@ -615,7 +629,7 @@ async def work_with_queue(queue_results: asyncio.Queue,
     # endregion
 
 
-async def read_input_file(queue_results: asyncio.Queue,
+async def read_input_file(queue_input: asyncio.Queue,
                           settings: dict,
                           path_to_file: str) -> None:
     """
@@ -636,11 +650,11 @@ async def read_input_file(queue_results: asyncio.Queue,
                 if targets:
                     for target in targets:
                         count_input += 1  # statistics
-                        queue_results.put_nowait(target)
-    queue_results.put_nowait(b"check for end")
+                        queue_input.put_nowait(target)
+    await queue_input.put(b"check for end")
 
 
-async def read_input_stdin(queue_results: asyncio.Queue,
+async def read_input_stdin(queue_input: asyncio.Queue,
                            settings: dict,
                            path_to_file: str = None) -> None:
     """
@@ -663,9 +677,9 @@ async def read_input_stdin(queue_results: asyncio.Queue,
                 if targets:
                     for target in targets:
                         count_input += 1
-                        queue_results.put_nowait(target)
+                        queue_input.put_nowait(target)
         except EOFError:
-            queue_results.put_nowait(b"check for end")
+            await queue_input.put(b"check for end")
             break
 
 
@@ -861,8 +875,12 @@ if __name__ == "__main__":
     start_time = datetime.datetime.now()
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     loop = asyncio.get_event_loop()
+    queue_input = asyncio.Queue()
     queue_results = asyncio.Queue()
-    producer_coro = method_create_targets(queue_results, settings, path_to_file_targets)
-    consumer_coro = work_with_queue(queue_results, count_cor)
-    loop.run_until_complete(asyncio.gather(producer_coro, consumer_coro))
+    queue_prints = asyncio.Queue()
+    read_input = method_create_targets(queue_input, settings, path_to_file_targets) # create targets
+    create_tasks = work_with_queue(queue_input, queue_results, queue_prints, count_cor) # execution
+    execute_tasks = work_with_queue_tasks(queue_results, queue_prints)
+    print_output = work_with_queue_result(queue_prints, output_file, mode_write)
+    loop.run_until_complete(asyncio.gather(read_input, create_tasks, execute_tasks, print_output))
     loop.close()
