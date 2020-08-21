@@ -54,8 +54,8 @@ Python, и функции в нем(либо по умолчанию: _generator
  Данный раздел сложно объяснить, в будущем будет упрощено, сейчас лучше сразу смотреть пример: 
  [_example_python_payloads/http_get.py_](https://github.com/JohnEskimSmith/PacketSenderLite/blob/master/example_python_payloads/http_get.py)
  
- 4. Если не указать payload - то сканер работает как простой граббер баннеров. То есть он вообще ничего не шлет в
- обнаруженый сервис. Это важно, например zgrab2 в модуле banner - шлет всегда "\\n" [zgrab2 banner module source](https://github.com/zmap/zgrab2/blob/6eaaa2fa00331a278875e783f0d2a6aabcb06481/modules/banner/scanner.go#L21). 
+ 4. Если не указать payload - то сканер работает как простой граббер баннеров. То есть он вообще ничего не отправляет в
+ обнаруженый сервис. Это важно, например zgrab2 в модуле banner - отправляет всегда "\\n" [zgrab2 banner module source](https://github.com/zmap/zgrab2/blob/6eaaa2fa00331a278875e783f0d2a6aabcb06481/modules/banner/scanner.go#L21). 
 В отличии от zgrab2 в настоящем проекте не предусмотрено значения по умолчанию. То есть, например, при подключении
 к web сервису по 80 порту, при пустом payload соединение будет разорвано по timeout без результата, потому как http сервис "обычно"
 ждет "команды". А, например, при подключении по ssh - сервис ssh - сам первый отправляет 
