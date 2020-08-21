@@ -88,7 +88,7 @@ def check_ip(ip_str: str) -> bool:
     try:
         ip_address(ip_str)
         return True
-    except:
+    except BaseException:
         return False
 
 
@@ -101,12 +101,14 @@ def check_network(net_str: str) -> bool:
     try:
         ip_network(net_str)
         return True
-    except:
+    except BaseException:
         return False
 
 
-def load_python_generator_payloads(path_to_module: str,
-                                   name_function: str) -> Callable[[], Iterable]:
+def load_python_generator_payloads(
+    path_to_module: str,
+    name_function: str) -> Callable[[],
+                                    Iterable]:
     """
     Загрузка модуля и функции из него, которая будет генерировать payloads.
     :param path_to_module:
@@ -131,7 +133,8 @@ def create_target_tcp_protocol(ip_str: str,
     current_settings = copy.copy(settings)
 
     if current_settings['max_size'] != -1:
-        current_settings['max_size'] = current_settings['max_size']  # remember - in bytes, not kb
+        # remember - in bytes, not kb
+        current_settings['max_size'] = current_settings['max_size']
 
     key_names = list(current_settings.keys())
     key_names.extend(['ip', 'payload', 'additions'])
@@ -141,21 +144,25 @@ def create_target_tcp_protocol(ip_str: str,
         for payload in current_settings['list_payloads']:
             tmp_settings = copy.copy(current_settings)
             tmp_settings['payload'] = payload
-            _payload_base64 = base64.standard_b64encode(payload).decode('utf-8')
-            # _additions - необходимы для информации, какой payload был направлен
+            _payload_base64 = base64.standard_b64encode(
+                payload).decode('utf-8')
+            # _additions - необходимы для информации, какой payload был
+            # направлен
             _additions = {'data_payload':
-                              {'payload_raw': _payload_base64,
-                               'variables': []}
+                          {'payload_raw': _payload_base64,
+                           'variables': []}
                           }
             tmp_settings['additions'] = _additions
             target = Target(**tmp_settings)
             yield target
     elif current_settings['python_payloads']:
-        name_function = 'generator_payloads'  # имя функции, генерирующей payloads по-умолчанию
+        # имя функции, генерирующей payloads по-умолчанию
+        name_function = 'generator_payloads'
         if current_settings['generator_payloads']:
             name_function = current_settings['generator_payloads']
         path_to_module = current_settings['python_payloads']
-        generator_payloads = load_python_generator_payloads(path_to_module, name_function)
+        generator_payloads = load_python_generator_payloads(
+            path_to_module, name_function)
         for payload in generator_payloads():
             tmp_settings = copy.copy(current_settings)
             tmp_settings['payload'] = payload['payload']
@@ -163,7 +170,8 @@ def create_target_tcp_protocol(ip_str: str,
             target = Target(**tmp_settings)
             yield target
     else:
-        # отсутствует payload - фактически означает, "считывать баннеры сервисов"
+        # отсутствует payload - фактически означает, "считывать баннеры
+        # сервисов"
         current_settings['payload'] = None
         current_settings['additions'] = None
         target = Target(**current_settings)
@@ -190,24 +198,24 @@ def create_template_struct(target: NamedTuple) -> dict:
     :return:
     """
     result = {'data':
-                  {'tcp':
-                       {'status': 'tcp',
-                        'result':
-                            {'response':
-                                {'request': {}
-                                }
-                            }
-                       }
+              {'tcp':
+               {'status': 'tcp',
+                'result':
+                {'response':
+                 {'request': {}
                   }
+                 }
+                }
+               }
               }
     if target.sslcheck:
         _tls_log = {'tls_log':
-                        {'handshake_log':
-                             {'server_certificates':
-                                  {'certificate': {'parsed': {},
-                                                   'raw': ''}}
-                              }
-                         }
+                    {'handshake_log':
+                     {'server_certificates':
+                      {'certificate': {'parsed': {},
+                                       'raw': ''}}
+                      }
+                     }
                     }
         result['data']['tcp']['result']['response']['request'].update(_tls_log)
     return result
@@ -252,14 +260,14 @@ def make_document_from_response(buffer: bytes,
         json_record['port'] = int(target.port)
         return json_record
 
-
     _default_record = create_template_struct(target)
     _default_record['data']['tcp']['status'] = "success"
-    _default_record['data']['tcp']['result']['response']['content_length'] = len(buffer)
+    _default_record['data']['tcp']['result']['response']['content_length'] = len(
+        buffer)
     # _default_record['data']['tcp']['result']['response']['body'] = ''
     try:
         _default_record['data']['tcp']['options'] = target.additions
-    except:
+    except BaseException:
         pass
     # region ADD DESC.
     # отказался от попыток декодировать данные
@@ -274,7 +282,8 @@ def make_document_from_response(buffer: bytes,
     try:
         _base64_data = base64.b64encode(buffer).decode('utf-8')
         _default_record['data']['tcp']['result']['response']['body_raw'] = _base64_data
-        # _base64_data - содержит байты в base64 - для того чтоб их удобно было отправлять в stdout
+        # _base64_data - содержит байты в base64 - для того чтоб их удобно было
+        # отправлять в stdout
     except Exception as e:
         pass
     try:
@@ -287,14 +296,15 @@ def make_document_from_response(buffer: bytes,
         for namehash, func in hashs.items():
             hm = func()
             hm.update(buffer)
-            _default_record['data']['tcp']['result']['response'][f'body_{namehash}'] = hm.hexdigest()
+            _default_record['data']['tcp']['result']['response'][f'body_{namehash}'] = hm.hexdigest(
+            )
     except Exception as e:
         pass
     _default_record['data']['tcp']['result']['response']['body_hexdump'] = ''
     try:
         # еще одно представление результата(байт)
         # Transform binary data to the hex dump text format:
-        # 00000000: 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+        # 00000000: 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  .........
         # для этого и необходим модуль hexdump
         hdump = hexdump(buffer, result='return')
         _output = base64.b64encode(bytes(hdump, 'utf-8'))
@@ -326,21 +336,21 @@ def convert_bytes_to_cert(bytes_cert):
     cert = None
     try:
         cert = x509.load_der_x509_certificate(bytes_cert, default_backend())
-    except:
+    except BaseException:
         try:
-            cert = x509.load_pem_x509_certificate(bytes_cert, default_backend())
-        except:
+            cert = x509.load_pem_x509_certificate(
+                bytes_cert, default_backend())
+        except BaseException:
             pass
 
     if cert:
         try:
-            alg_hash_name = cert.signature_hash_algorithm.name
+            # alg_hash_name = cert.signature_hash_algorithm.name
             alg_hash = cert.signature_hash_algorithm
-            tp = cert.fingerprint(alg_hash)
-            alg_hash_value = ''.join('{:02x}'.format(x) for x in tp)
-        except:
+            # tp = cert.fingerprint(alg_hash)
+            # alg_hash_value = ''.join('{:02x}'.format(x) for x in tp)
+        except BaseException:
             pass
-
 
         # region block not used
         # signature_hash_algorithm = cert.signature_hash_algorithm
@@ -358,8 +368,10 @@ def convert_bytes_to_cert(bytes_cert):
             result['validity'] = {}
             result['validity']['end_datetime'] = cert.not_valid_after
             result['validity']['start_datetime'] = cert.not_valid_before
-            result['validity']['end'] = result['validity']['end_datetime'].strftime('%Y-%m-%dT%H:%M:%SZ')
-            result['validity']['start'] = result['validity']['start_datetime'].strftime('%Y-%m-%dT%H:%M:%SZ')
+            result['validity']['end'] = result['validity']['end_datetime'].strftime(
+                '%Y-%m-%dT%H:%M:%SZ')
+            result['validity']['start'] = result['validity']['start_datetime'].strftime(
+                '%Y-%m-%dT%H:%M:%SZ')
         except Exception as e:
             pass
         result['issuer'] = {}
@@ -378,7 +390,7 @@ def convert_bytes_to_cert(bytes_cert):
         try:
             if 'v' in cert.version.name:
                 result['version'] = cert.version.name.split('v')[1].strip()
-        except:
+        except BaseException:
             result['version'] = str(cert.version.value)
         dnss = get_certificate_domains(cert)
         atr = cert.subject._attributes
@@ -392,7 +404,7 @@ def convert_bytes_to_cert(bytes_cert):
         try:
             result['serialNumber_int'] = int('0x' + result['serialNumber'], 16)
             result['serial_number'] = str(result['serialNumber_int'])
-        except:
+        except BaseException:
             result['serialNumber_int'] = 0
         result['names'] = dnss
         if result['serialNumber_int'] == 0:
@@ -423,7 +435,7 @@ def get_certificate_domains(cert):
             ext = ext.value
             if isinstance(ext, x509.SubjectAlternativeName):
                 return ext.get_values_for_type(x509.DNSName)
-    except:
+    except BaseException:
         return []
 
 
@@ -447,7 +459,10 @@ async def worker_single(target: NamedTuple,
         if target.sslcheck:  # если при запуске в настройках указано --use-ssl - то контекст ssl
             ssl_context = ssl._create_unverified_context()
             future_connection = asyncio.open_connection(
-                target.ip, target.port, ssl=ssl_context, ssl_handshake_timeout=target.timeout_ssl)
+                target.ip,
+                target.port,
+                ssl=ssl_context,
+                ssl_handshake_timeout=target.timeout_ssl)
         else:
             future_connection = asyncio.open_connection(
                 target.ip, target.port)
@@ -457,14 +472,18 @@ async def worker_single(target: NamedTuple,
                 try:
                     _sub_ssl = writer._transport.get_extra_info('ssl_object')
                     cert_bytes = _sub_ssl.getpeercert(binary_form=True)
-                    cert_bytes_base64 = base64.standard_b64encode(cert_bytes).decode('utf-8')
+                    cert_bytes_base64 = base64.standard_b64encode(
+                        cert_bytes).decode('utf-8')
                     certificate_dict = convert_bytes_to_cert(cert_bytes)
-                except:
+                except BaseException:
                     pass
         except Exception as e:
             await asyncio.sleep(0.005)
-            future_connection.close()
-            del future_connection
+            try:
+                future_connection.close()
+                del future_connection
+            except Exception as e:
+                pass
             result = create_template_error(target, str(e))
         else:
             try:
@@ -472,18 +491,20 @@ async def worker_single(target: NamedTuple,
                     writer.write(target.payload)
                 future_reader = reader.read(target.max_size)
                 try:
-                    # через asyncio.wait_for - задаем время на чтение из соединения
+                    # через asyncio.wait_for - задаем время на чтение из
+                    # соединения
                     data = await asyncio.wait_for(future_reader, timeout=target.timeout_read)
                 except Exception as e:
                     result = create_template_error(target, str(e))
                 else:
                     check_filter = filter_bytes(data, target)
                     if check_filter:
-                        result = make_document_from_response(data, target)  # создать результат
+                        result = make_document_from_response(
+                            data, target)  # создать результат
                         if target.sslcheck:
                             if cert_bytes_base64:
                                 result['data']['tcp']['result']['response']['request']['tls_log']['handshake_log'][
-                                'server_certificates']['certificate']['raw'] = cert_bytes_base64
+                                    'server_certificates']['certificate']['raw'] = cert_bytes_base64
                             if certificate_dict:
                                 result['data']['tcp']['result']['response']['request']['tls_log'][
                                     'handshake_log'][
@@ -491,20 +512,24 @@ async def worker_single(target: NamedTuple,
 
                     else:
                         # TODO: добавить статус success-not-contain
-                        # TODO: для обозначения того, что сервис найдет, но не попал под фильтр
+                        # TODO: для обозначения того, что сервис найдет, но не
+                        # попал под фильтр
                         pass
                     await asyncio.sleep(0.005)
                 try:
                     writer.close()
-                except:
+                except BaseException:
                     pass
             except Exception as e:
                 result = create_template_error(target, str(e))
-                future_connection.close()
+                try:
+                    future_connection.close()
+                except Exception as e:
+                    pass
                 await asyncio.sleep(0.005)
                 try:
                     writer.close()
-                except:
+                except Exception as e:
                     pass
         if result:
             success = return_value_from_dict(result, "data.tcp.status")
@@ -567,12 +592,13 @@ async def work_with_queue(queue_with_input: asyncio.Queue,
             await queue_with_tasks.put(b"check for end")
             break
         if item:
-            task = asyncio.create_task(worker_single(item, semaphore, queue_out))
+            task = asyncio.create_task(
+                worker_single(item, semaphore, queue_out))
             await queue_with_tasks.put(task)
 
 
-async def work_with_queue_tasks(queue_results,
-                                queue_prints) -> None:
+async def work_with_queue_tasks(queue_results: asyncio.Queue,
+                                queue_prints: asyncio.Queue) -> None:
     """
 
     :param queue_results:
@@ -693,7 +719,8 @@ def parse_payloads_files(payload_files: List[str]) -> List[str]:
     :param payload_files:
     :return:
     """
-    result = [path_to_file for path_to_file in payload_files if checkfile(path_to_file)]
+    result = [
+        path_to_file for path_to_file in payload_files if checkfile(path_to_file)]
     return result
 
 
@@ -728,60 +755,126 @@ def return_bytes_from_single_payload(string_base64: str) -> bytes:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Packet sender lite(asyncio)')
-    parser.add_argument("-settings", type=str, help="path to file with settings(yaml)")
+    parser.add_argument(
+        "-settings",
+        type=str,
+        help="path to file with settings(yaml)")
 
-    parser.add_argument("-f", "--input-file", dest='input_file', type=str, help="path to file with targets")
+    parser.add_argument(
+        "-f",
+        "--input-file",
+        dest='input_file',
+        type=str,
+        help="path to file with targets")
 
-    parser.add_argument("-o", "--output-file", dest='output_file', type=str, help="path to file with results")
+    parser.add_argument(
+        "-o",
+        "--output-file",
+        dest='output_file',
+        type=str,
+        help="path to file with results")
 
-    parser.add_argument("-s", "--senders", dest='senders', type=int,
-                        default=1024, help=' Number of send coroutines to use (default: 1024)')
+    parser.add_argument(
+        "-s",
+        "--senders",
+        dest='senders',
+        type=int,
+        default=1024,
+        help=' Number of send coroutines to use (default: 1024)')
 
-    parser.add_argument("--max-size", dest='max_size', type=int,
-                        default=1024, help='Maximum total bytes(!) to read for a single host (default 1024)')
+    parser.add_argument(
+        "--max-size",
+        dest='max_size',
+        type=int,
+        default=1024,
+        help='Maximum total bytes(!) to read for a single host (default 1024)')
 
-    parser.add_argument("-tconnect", "--timeout-connection", dest='timeout_connection', type=int,
-                        default=3, help='Set connection timeout for open_connection (default: 3)')
+    parser.add_argument(
+        "-tconnect",
+        "--timeout-connection",
+        dest='timeout_connection',
+        type=int,
+        default=3,
+        help='Set connection timeout for open_connection (default: 3)')
 
-    parser.add_argument("-tread", "--timeout-read", dest='timeout_read', type=int,
-                        default=3, help='Set connection timeout for reader from connection (default: 3)')
+    parser.add_argument(
+        "-tread",
+        "--timeout-read",
+        dest='timeout_read',
+        type=int,
+        default=3,
+        help='Set connection timeout for reader from connection (default: 3)')
 
-    parser.add_argument("-tssl", "--timeout-ssl", dest='timeout_ssl', type=int,
-                        default=3, help='Set connection timeout for reader from ssl connection (default: 3)')
+    parser.add_argument(
+        "-tssl",
+        "--timeout-ssl",
+        dest='timeout_ssl',
+        type=int,
+        default=3,
+        help='Set connection timeout for reader from ssl connection (default: 3)')
 
-    parser.add_argument("-p", "--port", type=int, help='Specify port (default: 80)')
+    parser.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        help='Specify port (default: 80)')
 
     parser.add_argument('--use-ssl', dest='sslcheck', action='store_true')
 
     # region filters
-    parser.add_argument("--single-contain", dest='single_contain', type=str,
-                        help='trying to find a substring in a response(set in base64)')
+    parser.add_argument(
+        "--single-contain",
+        dest='single_contain',
+        type=str,
+        help='trying to find a substring in a response(set in base64)')
 
-    parser.add_argument("--single-contain-hex", dest='single_contain_hex', type=str,
-                        help='trying to find a substring in a response bytes (set in bytes(hex))')
+    parser.add_argument(
+        "--single-contain-hex",
+        dest='single_contain_hex',
+        type=str,
+        help='trying to find a substring in a response bytes (set in bytes(hex))')
 
-    parser.add_argument("--single-contain-string", dest='single_contain_string', type=str,
-                        help='trying to find a substring in a response(set in str)')
+    parser.add_argument(
+        "--single-contain-string",
+        dest='single_contain_string',
+        type=str,
+        help='trying to find a substring in a response(set in str)')
 
-    parser.add_argument('--show-only-success', dest='show_only_success', action='store_true')
+    parser.add_argument(
+        '--show-only-success',
+        dest='show_only_success',
+        action='store_true')
     # endregion
 
-    parser.add_argument('--list-payloads', nargs='*', dest='list_payloads',
-                        help='list payloads(bytes stored in files): file1 file2 file2', required=False)
+    parser.add_argument(
+        '--list-payloads',
+        nargs='*',
+        dest='list_payloads',
+        help='list payloads(bytes stored in files): file1 file2 file2',
+        required=False)
 
     parser.add_argument("--single-payload", dest='single_payload', type=str,
                         help='single payload in BASE64 from bytes')
 
-    parser.add_argument("--single-payload-hex", dest='single_payload_hex', type=str,
-                        help='single payload in hex(bytes)')
+    parser.add_argument(
+        "--single-payload-hex",
+        dest='single_payload_hex',
+        type=str,
+        help='single payload in hex(bytes)')
 
     parser.add_argument("--python-payloads", dest='python_payloads', type=str,
                         help='path to Python module')
 
-    parser.add_argument("--generator-payloads", dest='generator_payloads', type=str,
-                        help='name function of gen.payloads from Python module')
+    parser.add_argument(
+        "--generator-payloads",
+        dest='generator_payloads',
+        type=str,
+        help='name function of gen.payloads from Python module')
 
-    parser.add_argument('--show-statistics', dest='statistics', action='store_true')
+    parser.add_argument(
+        '--show-statistics',
+        dest='statistics',
+        action='store_true')
 
     path_to_file_targets = None  # set default None to inputfile
     args = parser.parse_args()
@@ -793,11 +886,14 @@ if __name__ == "__main__":
         if not args.port:
             print('Exit, port?')
             exit(1)
-        # в method_create_targets - метод, которые или читает из stdin или из файла
+        # в method_create_targets - метод, которые или читает из stdin или из
+        # файла
         if not args.input_file:
-            method_create_targets = read_input_stdin  # set method - async read from stdin (str)
+            # set method - async read from stdin (str)
+            method_create_targets = read_input_stdin
         else:
-            method_create_targets = read_input_file  # set method - async read from file(txt, str)
+            # set method - async read from file(txt, str)
+            method_create_targets = read_input_file
 
             path_to_file_targets = args.input_file
             if not checkfile(path_to_file_targets):
@@ -817,7 +913,8 @@ if __name__ == "__main__":
         search_values = []
         if args.single_contain:
             try:
-                search_value = return_bytes_from_single_payload(args.single_contain)
+                search_value = return_bytes_from_single_payload(
+                    args.single_contain)
                 assert search_value is not None
                 search_values.append(search_value)
             except Exception as e:
@@ -845,11 +942,12 @@ if __name__ == "__main__":
 
         single_payload = None
         if args.single_payload:
-            single_payload = return_bytes_from_single_payload(args.single_payload)
+            single_payload = return_bytes_from_single_payload(
+                args.single_payload)
         elif args.single_payload_hex:
             try:
                 single_payload = bytes.fromhex(args.single_payload_hex)
-            except:
+            except BaseException:
                 pass
         if single_payload:
             payloads.append(single_payload)
@@ -878,9 +976,14 @@ if __name__ == "__main__":
     queue_input = asyncio.Queue()
     queue_results = asyncio.Queue()
     queue_prints = asyncio.Queue()
-    read_input = method_create_targets(queue_input, settings, path_to_file_targets) # create targets
-    create_tasks = work_with_queue(queue_input, queue_results, queue_prints, count_cor) # execution
+    read_input = method_create_targets(queue_input, settings, path_to_file_targets)  # create targets
+    create_tasks = work_with_queue(queue_input, queue_results, queue_prints, count_cor)  # execution
     execute_tasks = work_with_queue_tasks(queue_results, queue_prints)
     print_output = work_with_queue_result(queue_prints, output_file, mode_write)
-    loop.run_until_complete(asyncio.gather(read_input, create_tasks, execute_tasks, print_output))
+    loop.run_until_complete(
+        asyncio.gather(
+            read_input,
+            create_tasks,
+            execute_tasks,
+            print_output))
     loop.close()
