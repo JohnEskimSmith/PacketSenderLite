@@ -106,8 +106,8 @@ def check_network(net_str: str) -> bool:
 
 
 def load_python_generator_payloads(
-    path_to_module: str,
-    name_function: str) -> Callable[[],
+    _path_to_module: str,
+    _name_function: str) -> Callable[[],
                                     Iterable]:
     """
     Загрузка модуля и функции из него, которая будет генерировать payloads.
@@ -115,7 +115,9 @@ def load_python_generator_payloads(
     :param name_function:
     :return:
     """
-    _mod = importlib.import_module(path_to_module)
+    path_to_module = _path_to_module.strip("'")
+    name_function = _name_function.strip("'")
+    _mod = importlib.import_module('.', path_to_module)
     need_function = getattr(_mod, name_function)
     return need_function
 
@@ -163,7 +165,7 @@ def create_target_tcp_protocol(ip_str: str,
         path_to_module = current_settings['python_payloads']
         generator_payloads = load_python_generator_payloads(
             path_to_module, name_function)
-        for payload in generator_payloads():
+        for payload in generator_payloads(ip_str, settings):
             tmp_settings = copy.copy(current_settings)
             tmp_settings['payload'] = payload['payload']
             tmp_settings['additions'] = payload['data_payload']
@@ -613,10 +615,6 @@ async def work_with_queue_tasks(queue_results: asyncio.Queue,
             break
         if task:
             await task
-
-    # global count_input
-    # global count_good
-    # global count_error
 
 
 async def work_with_queue_result(queue_out: asyncio.Queue,
