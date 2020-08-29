@@ -28,7 +28,7 @@ def generator_http_get() -> list:
         except:
             pass
     payloads = []  # will be result for function
-    _payload = b'GET / HTTP/1.0\r\n\r\nUser-Agent: curl/7.68.0\r\n\r\nAccept: */*\r\n\r\n'
+    _payload = b'GET / HTTP/1.0\r\nUser-Agent: curl/7.68.0\r\nAccept: */*\r\n\r\n'
     _payload_base64 = ''
     if isinstance(_payload, bytes):
         _payload_base64 = standard_b64encode(_payload).decode('utf-8')
@@ -46,4 +46,4 @@ def generator_http_get() -> list:
     payloads.append(payload)
     return payloads
 
-# print(generator_http_get())
+print(generator_http_get())
