@@ -5,7 +5,8 @@ __license__ = "GPLv3"
 __status__ = "Dev"
 
 
-def generator_http_get() -> list:
+def generator_http_get(ip_str: str,
+                        settings: dict) -> list:
     """
     example gen. bytes payload - for http - b'GET / HTTP/1.0\r\n\r\nUser-Agent: curl/7.68.0\r\n\r\nAccept: */*\r\n\r\n'
     :return:
@@ -46,4 +47,4 @@ def generator_http_get() -> list:
     payloads.append(payload)
     return payloads
 
-print(generator_http_get())
+# print(generator_http_get())
