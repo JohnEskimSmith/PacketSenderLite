@@ -17,6 +17,8 @@ import argparse
 import datetime
 import aiofiles
 import copy
+from pathlib import Path
+from os import pathsep
 from os import path
 import importlib
 from cryptography import x509
@@ -106,8 +108,8 @@ def check_network(net_str: str) -> bool:
 
 
 def load_python_generator_payloads(
-    _path_to_module: str,
-    _name_function: str) -> Callable[[],
+    name_module: str,
+    name_function: str) -> Callable[[],
                                     Iterable]:
     """
     Загрузка модуля и функции из него, которая будет генерировать payloads.
@@ -115,11 +117,40 @@ def load_python_generator_payloads(
     :param name_function:
     :return:
     """
-    path_to_module = _path_to_module.strip("'")
-    name_function = _name_function.strip("'")
-    _mod = importlib.import_module('.', path_to_module)
+    _mod = importlib.import_module(name_module)
     need_function = getattr(_mod, name_function)
     return need_function
+
+
+def load_python_file(_path_to_module_py,
+    name_function: str) -> Callable[[], Iterable]:
+    module_name_like_filename_py = str(_path_to_module_py).rstrip('.py')
+    spec = importlib.util.spec_from_file_location(module_name_like_filename_py, _path_to_module_py)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    need_function = getattr(m, name_function)
+    return need_function
+
+
+def load_python_generator_payloads_from_file(
+    _path_to_module_py: str,
+    _name_function: str) -> Callable[[], Iterable]:
+    if _path_to_module_py.endswith('.py'):
+        if pathsep in _path_to_module_py:
+            _path_to_file = Path(_path_to_module_py)
+        else:
+            PROJECT_ROOT = Path(__file__).parent
+            _path_to_file = PROJECT_ROOT / _path_to_module_py
+        try:
+            if _path_to_file.exists() and _path_to_file.is_file():
+                return load_python_file(_path_to_file, _name_function)
+        except Exception as e:
+            pass
+    else:
+        try:
+            return load_python_generator_payloads(_path_to_module_py, _name_function)
+        except Exception as e:
+            pass
 
 
 def create_target_tcp_protocol(ip_str: str,
@@ -158,12 +189,11 @@ def create_target_tcp_protocol(ip_str: str,
             target = Target(**tmp_settings)
             yield target
     elif current_settings['python_payloads']:
-        # имя функции, генерирующей payloads по-умолчанию
-        name_function = 'generator_payloads'
+        name_function = 'generator_payloads'  # function name, default
         if current_settings['generator_payloads']:
-            name_function = current_settings['generator_payloads']
-        path_to_module = current_settings['python_payloads']
-        generator_payloads = load_python_generator_payloads(
+            name_function = current_settings['generator_payloads'].strip('"').strip("'")
+        path_to_module = current_settings['python_payloads'].strip('"').strip("'")
+        generator_payloads = load_python_generator_payloads_from_file(
             path_to_module, name_function)
         for payload in generator_payloads(ip_str, settings):
             tmp_settings = copy.copy(current_settings)
@@ -860,14 +890,19 @@ if __name__ == "__main__":
         type=str,
         help='single payload in hex(bytes)')
 
-    parser.add_argument("--python-payloads", dest='python_payloads', type=str,
-                        help='path to Python module')
+    # region python payloads
+    parser.add_argument(
+        "--python-payloads",
+        dest='python_payloads',
+        type=str,
+        help='path to Python module')
 
     parser.add_argument(
         "--generator-payloads",
         dest='generator_payloads',
         type=str,
         help='name function of gen.payloads from Python module')
+    # endregion
 
     parser.add_argument(
         '--show-statistics',
@@ -950,7 +985,7 @@ if __name__ == "__main__":
         if single_payload:
             payloads.append(single_payload)
 
-    time_out_for_connection = args.timeout_connection + 1  # TODO: rethink
+    time_out_for_connection = args.timeout_connection
     settings = {'port': args.port,
                 'sslcheck': args.sslcheck,
                 'timeout_connection': args.timeout_connection,
