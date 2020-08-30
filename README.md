@@ -32,3 +32,5 @@ option --single-contain='TWljcm9zb2Z0IEROUw==' means the following: 'TWljcm9zb2Z
 python3.8 packetsenderlite.py -f targets.txt  --port=80 --python-payloads="/home/user/PacketSenderLite/example_python_payloads/http_get.py" --generator-payloads="generator_http_get"
 
 python3.8 packetsenderlite.py -f targets.txt  --port=80 --python-payloads="example_python_payloads.http_get" --generator-payloads="generator_http_get"
+
+zmap 95.165.0.0/16 -B 10M -q -v 1 -p 80 -P1 | python3.8 packetsenderlite.py --port=80 --python-payloads="example_python_payloads.http_get" --generator-payloads="generator_http_get"
