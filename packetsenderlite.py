@@ -521,13 +521,37 @@ async def worker_single(target: NamedTuple,
             try:
                 if target.payload:  # если указан payload - то он и отправляется в первую очередь
                     writer.write(target.payload)
-                future_reader = reader.read(target.max_size)
+                    await writer.drain()
+                count_size = target.max_size
                 try:
-                    # через asyncio.wait_for - задаем время на чтение из
-                    # соединения
-                    data = await asyncio.wait_for(future_reader, timeout=target.timeout_read)
+                    data = b''
+                    while True:
+                        try:
+                            future_reader = reader.read(count_size)
+                            _data = await asyncio.wait_for(future_reader, timeout=0.5)
+                            if _data:
+                                data += _data
+                                count_size = count_size - len(data)
+                            else:
+                                break
+                            if count_size <= 0:
+                                break
+                        except Exception as e:
+                            break
+                    if len(data) == 0:
+                        raise BaseException
                 except Exception as e:
                     result = create_template_error(target, str(e))
+                # region old
+                # future_reader = reader.read(target.max_size)
+                # try:
+                #     # через asyncio.wait_for - задаем время на чтение из
+                #     # соединения
+                #     data = await asyncio.wait_for(future_reader, timeout=target.timeout_read)
+                # except Exception as e:
+                #     result = create_template_error(target, str(e))
+                # endregion
+
                 else:
                     check_filter = filter_bytes(data, target)
                     if check_filter:
