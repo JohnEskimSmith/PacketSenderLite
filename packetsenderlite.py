@@ -33,7 +33,7 @@ from typing import (Any,
                     List,
                     BinaryIO,
                     TextIO,
-                    )
+                    Tuple)
 
 
 def dict_paths(some_dict: dict,
@@ -471,6 +471,47 @@ def get_certificate_domains(cert):
         return []
 
 
+async def single_read(reader: asyncio.StreamReader,
+                      target: NamedTuple) -> Tuple[bool, Any]:
+    # region old
+    future_reader = reader.read(target.max_size)
+    try:
+        # через asyncio.wait_for - задаем время на чтение из
+        # соединения
+        data = await asyncio.wait_for(future_reader, timeout=target.timeout_read)
+        return True, data
+    except Exception as e:
+        result = create_template_error(target, str(e))
+        return False, result
+
+
+async def multi_read(reader: asyncio.StreamReader,
+                     target: NamedTuple) -> Tuple[bool, Any]:
+    count_size = target.max_size
+    try:
+        data = b''
+        while True:
+            try:
+                future_reader = reader.read(count_size)
+                _data = await asyncio.wait_for(future_reader, timeout=0.5)
+                if _data:
+                    data += _data
+                    count_size = count_size - len(data)
+                else:
+                    break
+                if count_size <= 0:
+                    break
+            except Exception as e:
+                break
+
+        if len(data) == 0:
+            return False, create_template_error(target, 'empty')
+        else:
+            return True, data
+    except Exception as e:
+        return False, create_template_error(target, str(e))
+
+
 async def worker_single(target: NamedTuple,
                         semaphore: asyncio.Semaphore,
                         queue_out: asyncio.Queue) -> dict:
@@ -519,44 +560,21 @@ async def worker_single(target: NamedTuple,
             result = create_template_error(target, str(e))
         else:
             try:
+                status_data = False
                 if target.payload:  # если указан payload - то он и отправляется в первую очередь
                     writer.write(target.payload)
                     await writer.drain()
-                count_size = target.max_size
-                try:
-                    data = b''
-                    while True:
-                        try:
-                            future_reader = reader.read(count_size)
-                            _data = await asyncio.wait_for(future_reader, timeout=0.5)
-                            if _data:
-                                data += _data
-                                count_size = count_size - len(data)
-                            else:
-                                break
-                            if count_size <= 0:
-                                break
-                        except Exception as e:
-                            break
-                    if len(data) == 0:
-                        raise BaseException
-                except Exception as e:
-                    result = create_template_error(target, str(e))
-                # region old
-                # future_reader = reader.read(target.max_size)
-                # try:
-                #     # через asyncio.wait_for - задаем время на чтение из
-                #     # соединения
-                #     data = await asyncio.wait_for(future_reader, timeout=target.timeout_read)
-                # except Exception as e:
-                #     result = create_template_error(target, str(e))
-                # endregion
-
-                else:
-                    check_filter = filter_bytes(data, target)
+                if target.mode == 'single':
+                    status_data, data_or_error_result = await single_read(reader, target)
+                elif target.mode == 'multi':
+                    status_data, data_or_error_result = await asyncio.wait_for(
+                        multi_read(reader, target),
+                        timeout=target.timeout_read)
+                if status_data:
+                    check_filter = filter_bytes(data_or_error_result, target)
                     if check_filter:
                         result = make_document_from_response(
-                            data, target)  # создать результат
+                            data_or_error_result, target)  # создать результат
                         if target.sslcheck:
                             if cert_bytes_base64:
                                 result['data']['tcp']['result']['response']['request']['tls_log']['handshake_log'][
@@ -572,6 +590,8 @@ async def worker_single(target: NamedTuple,
                         # попал под фильтр
                         pass
                     await asyncio.sleep(0.005)
+                else:
+                    result = data_or_error_result  # get errors
                 try:
                     writer.close()
                 except BaseException:
@@ -628,7 +648,7 @@ async def write_to_file(object_file: TextIO,
     await object_file.write(record_str + '\n')
 
 
-async def work_with_queue(queue_with_input: asyncio.Queue,
+async def work_with_create_task_queue(queue_with_input: asyncio.Queue,
                           queue_with_tasks: asyncio.Queue,
                           queue_out: asyncio.Queue,
                           count: int) -> None:
@@ -813,6 +833,14 @@ if __name__ == "__main__":
         help="path to file with settings(yaml)")
 
     parser.add_argument(
+        "-m",
+        "--mode",
+        dest='mode',
+        type=str,
+        default='single',
+        help="type of read mode from connections:single, multi (default: single)")
+
+    parser.add_argument(
         "-f",
         "--input-file",
         dest='input_file',
@@ -846,24 +874,24 @@ if __name__ == "__main__":
         "--timeout-connection",
         dest='timeout_connection',
         type=int,
-        default=3,
-        help='Set connection timeout for open_connection (default: 3)')
+        default=7,
+        help='Set connection timeout for open_connection (default: 7)')
 
     parser.add_argument(
         "-tread",
         "--timeout-read",
         dest='timeout_read',
         type=int,
-        default=3,
-        help='Set connection timeout for reader from connection (default: 3)')
+        default=7,
+        help='Set connection timeout for reader from connection (default: 7)')
 
     parser.add_argument(
         "-tssl",
         "--timeout-ssl",
         dest='timeout_ssl',
         type=int,
-        default=3,
-        help='Set connection timeout for reader from ssl connection (default: 3)')
+        default=7,
+        help='Set connection timeout for reader from ssl connection (default: 7)')
 
     parser.add_argument(
         "-p",
@@ -943,6 +971,9 @@ if __name__ == "__main__":
         if not args.port:
             print('Exit, port?')
             exit(1)
+        if args.mode not in ('single', 'multi'):
+            print('Exit, type of read mode from connections?')
+            exit(1)
         # в method_create_targets - метод, которые или читает из stdin или из
         # файла
         if not args.input_file:
@@ -1019,7 +1050,8 @@ if __name__ == "__main__":
                 'search_values': search_values,
                 'max_size': args.max_size,
                 'python_payloads': args.python_payloads,
-                'generator_payloads': args.generator_payloads
+                'generator_payloads': args.generator_payloads,
+                'mode': args.mode
                 }
 
     count_cor = args.senders
@@ -1034,7 +1066,7 @@ if __name__ == "__main__":
     queue_results = asyncio.Queue()
     queue_prints = asyncio.Queue()
     read_input = method_create_targets(queue_input, settings, path_to_file_targets)  # create targets
-    create_tasks = work_with_queue(queue_input, queue_results, queue_prints, count_cor)  # execution
+    create_tasks = work_with_create_task_queue(queue_input, queue_results, queue_prints, count_cor)  # execution
     execute_tasks = work_with_queue_tasks(queue_results, queue_prints)
     print_output = work_with_queue_result(queue_prints, output_file, mode_write)
     loop.run_until_complete(
