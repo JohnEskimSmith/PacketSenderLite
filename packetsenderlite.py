@@ -6,24 +6,32 @@ __status__ = "Dev"
 
 from aioconsole import ainput
 from ipaddress import ip_address, ip_network
-import ssl
+from ssl import _create_unverified_context as ssl_create_unverified_context
 from collections import namedtuple
-import asyncio
-import ujson
-import base64
-from hashlib import sha256, sha1, md5
-from hexdump import hexdump
-import argparse
-import datetime
-import aiofiles
-import copy
+from aiofiles import open as aiofiles_open
+
 from pathlib import Path
 from os import pathsep
 from os import path
-import importlib
+
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
+from ujson import dumps as ujson_dumps
+
+from hashlib import sha256, sha1, md5
+from hexdump import hexdump
+import asyncio
+import argparse
+import datetime
+import copy
+import importlib
 import uvloop
+
+from base64 import (standard_b64encode as base64_standard_b64encode,
+                    b64encode as base64_b64encode,
+                    b64decode as base64_b64decode,
+                    )
+
 
 from typing import (Any,
                     Callable,
@@ -108,9 +116,8 @@ def check_network(net_str: str) -> bool:
 
 
 def load_python_generator_payloads(
-    name_module: str,
-    name_function: str) -> Callable[[],
-                                    Iterable]:
+        name_module: str,
+        name_function: str) -> Callable[[], Iterable]:
     """
     Загрузка модуля и функции из него, которая будет генерировать payloads.
     :param path_to_module:
@@ -123,7 +130,7 @@ def load_python_generator_payloads(
 
 
 def load_python_file(_path_to_module_py,
-    name_function: str) -> Callable[[], Iterable]:
+                     name_function: str) -> Callable[[], Iterable]:
     module_name_like_filename_py = str(_path_to_module_py).rstrip('.py')
     spec = importlib.util.spec_from_file_location(module_name_like_filename_py, _path_to_module_py)
     m = importlib.util.module_from_spec(spec)
@@ -133,8 +140,8 @@ def load_python_file(_path_to_module_py,
 
 
 def load_python_generator_payloads_from_file(
-    _path_to_module_py: str,
-    _name_function: str) -> Callable[[], Iterable]:
+        _path_to_module_py: str,
+        _name_function: str) -> Callable[[], Iterable]:
     if _path_to_module_py.endswith('.py'):
         if pathsep in _path_to_module_py:
             _path_to_file = Path(_path_to_module_py)
@@ -177,13 +184,13 @@ def create_target_tcp_protocol(ip_str: str,
         for payload in current_settings['list_payloads']:
             tmp_settings = copy.copy(current_settings)
             tmp_settings['payload'] = payload
-            _payload_base64 = base64.standard_b64encode(
+            _payload_base64 = base64_standard_b64encode(
                 payload).decode('utf-8')
             # _additions - необходимы для информации, какой payload был
             # направлен
             _additions = {'data_payload':
-                          {'payload_raw': _payload_base64,
-                           'variables': []}
+                              {'payload_raw': _payload_base64,
+                               'variables': []}
                           }
             tmp_settings['additions'] = _additions
             target = Target(**tmp_settings)
@@ -230,24 +237,24 @@ def create_template_struct(target: NamedTuple) -> dict:
     :return:
     """
     result = {'data':
-              {'tcp':
-               {'status': 'tcp',
-                'result':
-                {'response':
-                 {'request': {}
-                  }
-                 }
-                }
-               }
+                  {'tcp':
+                       {'status': 'tcp',
+                        'result':
+                            {'response':
+                                 {'request': {}
+                                  }
+                             }
+                        }
+                   }
               }
     if target.sslcheck:
         _tls_log = {'tls_log':
-                    {'handshake_log':
-                     {'server_certificates':
-                      {'certificate': {'parsed': {},
-                                       'raw': ''}}
-                      }
-                     }
+                        {'handshake_log':
+                             {'server_certificates':
+                                  {'certificate': {'parsed': {},
+                                                   'raw': ''}}
+                              }
+                         }
                     }
         result['data']['tcp']['result']['response']['request'].update(_tls_log)
     return result
@@ -280,6 +287,7 @@ def make_document_from_response(buffer: bytes,
     :param target:
     :return:
     """
+
     def update_line(json_record: dict,
                     target: NamedTuple) -> dict:
         """
@@ -312,7 +320,7 @@ def make_document_from_response(buffer: bytes,
     #     pass
     # endregion
     try:
-        _base64_data = base64.b64encode(buffer).decode('utf-8')
+        _base64_data = base64_b64encode(buffer).decode('utf-8')
         _default_record['data']['tcp']['result']['response']['body_raw'] = _base64_data
         # _base64_data - содержит байты в base64 - для того чтоб их удобно было
         # отправлять в stdout
@@ -339,7 +347,7 @@ def make_document_from_response(buffer: bytes,
         # 00000000: 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  .........
         # для этого и необходим модуль hexdump
         hdump = hexdump(buffer, result='return')
-        _output = base64.b64encode(bytes(hdump, 'utf-8'))
+        _output = base64_b64encode(bytes(hdump, 'utf-8'))
         output = _output.decode('utf-8')
         _default_record['data']['tcp']['result']['response']['body_hexdump'] = output
     except Exception as e:
@@ -530,7 +538,7 @@ async def worker_single(target: NamedTuple,
         cert_bytes_base64 = None
 
         if target.sslcheck:  # если при запуске в настройках указано --use-ssl - то контекст ssl
-            ssl_context = ssl._create_unverified_context()
+            ssl_context = ssl_create_unverified_context()
             future_connection = asyncio.open_connection(
                 target.ip,
                 target.port,
@@ -545,7 +553,7 @@ async def worker_single(target: NamedTuple,
                 try:
                     _sub_ssl = writer._transport.get_extra_info('ssl_object')
                     cert_bytes = _sub_ssl.getpeercert(binary_form=True)
-                    cert_bytes_base64 = base64.standard_b64encode(
+                    cert_bytes_base64 = base64_standard_b64encode(
                         cert_bytes).decode('utf-8')
                     certificate_dict = convert_bytes_to_cert(cert_bytes)
                 except BaseException:
@@ -617,9 +625,9 @@ async def worker_single(target: NamedTuple,
             try:
                 if args.show_only_success:
                     if success == "success":
-                        line = ujson.dumps(result)
+                        line = ujson_dumps(result)
                 else:
-                    line = ujson.dumps(result)
+                    line = ujson_dumps(result)
             except Exception as e:
                 pass
             if line:
@@ -648,10 +656,10 @@ async def write_to_file(object_file: TextIO,
     await object_file.write(record_str + '\n')
 
 
-async def work_with_create_task_queue(queue_with_input: asyncio.Queue,
-                          queue_with_tasks: asyncio.Queue,
-                          queue_out: asyncio.Queue,
-                          count: int) -> None:
+async def work_with_create_tasks_queue(queue_with_input: asyncio.Queue,
+                                      queue_with_tasks: asyncio.Queue,
+                                      queue_out: asyncio.Queue,
+                                      count: int) -> None:
     """
 
     :param queue_with_input:
@@ -705,7 +713,7 @@ async def work_with_queue_result(queue_out: asyncio.Queue,
         method_write_result = write_to_file
     else:
         method_write_result = write_to_stdout
-    async with aiofiles.open(filename, mode=mode_write) as file_with_results:
+    async with aiofiles_open(filename, mode=mode_write) as file_with_results:
         while True:
             line = await queue_out.get()
             if line == b"check for end":
@@ -722,8 +730,8 @@ async def work_with_queue_result(queue_out: asyncio.Queue,
                       'valid targets': count_input,
                       'success': count_good,
                       'fails': count_error}
-        async with aiofiles.open('/dev/stdout', mode='wb') as stats:
-            await stats.write(ujson.dumps(statistics).encode('utf-8') + b'\n')
+        async with aiofiles_open('/dev/stdout', mode='wb') as stats:
+            await stats.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
     # endregion
 
 
@@ -740,7 +748,7 @@ async def read_input_file(queue_input: asyncio.Queue,
     :return:
     """
     global count_input
-    async with aiofiles.open(path_to_file, mode='rt') as f:  # read str
+    async with aiofiles_open(path_to_file, mode='rt') as f:  # read str
         async for line in f:
             linein = line.strip()
             if any([check_ip(linein), check_network(linein)]):
@@ -819,7 +827,7 @@ def return_bytes_from_single_payload(string_base64: str) -> bytes:
     """
     try:
         _payload = string_base64.encode('utf-8')
-        payload = base64.b64decode(_payload)
+        payload = base64_b64decode(_payload)
         return payload
     except Exception as e:
         pass
@@ -1066,7 +1074,7 @@ if __name__ == "__main__":
     queue_results = asyncio.Queue()
     queue_prints = asyncio.Queue()
     read_input = method_create_targets(queue_input, settings, path_to_file_targets)  # create targets
-    create_tasks = work_with_create_task_queue(queue_input, queue_results, queue_prints, count_cor)  # execution
+    create_tasks = work_with_create_tasks_queue(queue_input, queue_results, queue_prints, count_cor)  # execution
     execute_tasks = work_with_queue_tasks(queue_results, queue_prints)
     print_output = work_with_queue_result(queue_prints, output_file, mode_write)
     loop.run_until_complete(
