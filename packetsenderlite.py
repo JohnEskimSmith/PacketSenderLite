@@ -752,11 +752,20 @@ async def read_input_file(queue_input: asyncio.Queue,
         async for line in f:
             linein = line.strip()
             if any([check_ip(linein), check_network(linein)]):
-                targets = create_targets_tcp_protocol(linein, settings)
+                targets = create_targets_tcp_protocol(linein, settings) # generator
                 if targets:
                     for target in targets:
-                        count_input += 1  # statistics
-                        queue_input.put_nowait(target)
+                        check_queue = True
+                        while check_queue:
+                            size_queue = queue_input.qsize()
+                            if size_queue < queue_limit_targets-1:
+                                count_input += 1  # statistics
+                                queue_input.put_nowait(target)
+                                check_queue = False
+                            else:
+                                await asyncio.sleep(sleep_duration_queue_full)
+
+
     await queue_input.put(b"check for end")
 
 
@@ -782,8 +791,15 @@ async def read_input_stdin(queue_input: asyncio.Queue,
                 targets = create_targets_tcp_protocol(linein, settings)
                 if targets:
                     for target in targets:
-                        count_input += 1
-                        queue_input.put_nowait(target)
+                        check_queue = True
+                        while check_queue:
+                            size_queue = queue_input.qsize()
+                            if size_queue < queue_limit_targets - 1:
+                                count_input += 1  # statistics
+                                queue_input.put_nowait(target)
+                                check_queue = False
+                            else:
+                                await asyncio.sleep(sleep_duration_queue_full)
         except EOFError:
             await queue_input.put(b"check for end")
             break
@@ -868,7 +884,14 @@ if __name__ == "__main__":
         dest='senders',
         type=int,
         default=1024,
-        help=' Number of send coroutines to use (default: 1024)')
+        help="Number of send coroutines to use (default: 1024)")
+
+    parser.add_argument(
+        "--queue-sleep",
+        dest='queue_sleep',
+        type=int,
+        default=1,
+        help='Sleep duration if the queue is full, default 1 sec. Size queue == senders')
 
     parser.add_argument(
         "--max-size",
@@ -1063,7 +1086,10 @@ if __name__ == "__main__":
                 }
 
     count_cor = args.senders
-
+    # region limits input Queue
+    queue_limit_targets = count_cor
+    sleep_duration_queue_full = args.queue_sleep
+    # endregion
     count_input = 0
     count_good = 0
     count_error = 0
