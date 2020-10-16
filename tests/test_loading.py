@@ -13,7 +13,7 @@ def payloads_file() -> str:
 
 @pytest.fixture
 def payloads_module() -> str:
-    return 'lib.tests.data'
+    return 'tests.data'
 
 
 @pytest.fixture(params=['payloads_file', 'payloads_module'])
