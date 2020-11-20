@@ -8,7 +8,7 @@ __status__ = "Dev"
 # noinspection PyUnusedLocal
 def generator_http_get(ip_str: str, settings: dict) -> list:
     """
-    example gen. bytes payload - for http - b'GET / HTTP/1.0\r\n\r\nUser-Agent: curl/7.68.0\r\n\r\nAccept: */*\r\n\r\n'
+    example gen. bytes payload - for http - b'GET / HTTP/1.0\r\nUser-Agent: curl/7.68.0\r\nAccept: */*\r\n\r\n'
     :return:
     """
     from inspect import currentframe

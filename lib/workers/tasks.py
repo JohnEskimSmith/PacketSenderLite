@@ -164,11 +164,12 @@ class OutputPrinter(QueueWorker):
     Takes results from results queue and put them to output
     """
 
-    def __init__(self, stats: Stats, in_queue: Queue, io, async_writer) -> None:
+    def __init__(self, output_file:str, stats: Stats, in_queue: Queue, io, async_writer) -> None:
         super().__init__(stats)
         self.in_queue = in_queue
         self.async_writer = async_writer
         self.io = io
+        self.output_file = output_file
 
     async def run(self):
         while True:
@@ -181,8 +182,11 @@ class OutputPrinter(QueueWorker):
         await asyncio.sleep(0.5)
         if self.stats:
             statistics = self.stats.dict()
-            async with aiofiles_open('/dev/stdout', mode='wb') as stats:
-                await stats.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
+            if self.output_file == '/dev/stdout':
+                await self.io.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
+            else:
+                async with aiofiles_open('/dev/stdout', mode='wb') as stats:
+                    await stats.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
 
 
 class TargetWorker:

@@ -33,7 +33,7 @@ async def main():
         input_reader: TargetReader = create_io_reader(statistics, queue_input, target_settings, config)
         task_producer = TaskProducer(statistics, queue_input, queue_tasks, target_worker)
         executor = Executor(statistics, queue_tasks, queue_prints)
-        printer = OutputPrinter(statistics, queue_prints, file_with_results, writer_coroutine)
+        printer = OutputPrinter(config.output_file, statistics, queue_prints, file_with_results, writer_coroutine)
 
         await asyncio.wait([
             worker.run() for worker in [input_reader, task_producer, executor, printer]
