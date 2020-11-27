@@ -16,7 +16,6 @@ from lib.core import Stats
 
 
 async def main():
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     arguments = parse_args()
     target_settings, config = parse_settings(arguments)
 
@@ -40,4 +39,5 @@ async def main():
         ])
 
 if __name__ == '__main__':
+    uvloop.install()
     asyncio.run(main())

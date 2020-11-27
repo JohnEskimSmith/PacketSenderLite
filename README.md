@@ -9,7 +9,7 @@ It can be used for both commercial and personal use.
 #### Search all DNS servers 
 
 ```
-zmap 95.165.0.0/16 -B 10M -q -v 1 -p 53 -P1 | python3.8 packetsenderlite.py --port=53 --single-payload='AB4ABgEAAAEAAAAAAAAHdmVyc2lvbgRiaW5kAAAQAAM='
+zmap 95.165.0.0/16 -B 10M -q -v 1 -p 53 -P 1 | python3.8 packetsenderlite.py --port=53 --single-payload='AB4ABgEAAAEAAAAAAAAHdmVyc2lvbgRiaW5kAAAQAAM='
 ```
 
 ```json
