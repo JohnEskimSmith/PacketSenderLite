@@ -93,6 +93,23 @@ class TargetFileReader(TargetReader):
         await self.producer.send_stop()
 
 
+class TargetSingleReader(TargetReader):
+    """
+    Reads --target input messages from args
+    """
+
+    def __init__(self, stats: Stats, input_queue: Queue, producer: InputProducer, single_targets: str):
+        super().__init__(stats, input_queue, producer)
+        self.single_targets = single_targets
+
+    async def run(self):
+        for single_target in self.single_targets:
+            linein = single_target.strip()
+            if linein:
+                await self.producer.send(linein)
+        await self.producer.send_stop()
+
+
 class TargetStdinReader(TargetReader):
     """
     Reads raw input messages from STDIN
@@ -306,9 +323,19 @@ class TargetWorker:
 
 def create_io_reader(stats: Stats, queue_input: Queue, target: TargetConfig, app_config: AppConfig) -> TargetReader:
     message_producer = InputProducer(stats, queue_input, target, app_config.senders - 1, app_config.queue_sleep)
-    if app_config.input_file:
+    if app_config.input_stdin:
+        return TargetStdinReader(stats, queue_input, message_producer)
+    if app_config.single_targets:
+        return TargetSingleReader(stats, queue_input, message_producer, app_config.single_targets)
+    elif app_config.input_file:
         return TargetFileReader(stats, queue_input, message_producer, app_config.input_file)
-    return TargetStdinReader(stats, queue_input, message_producer)
+    else:
+        # TODO : rethink...
+        print("""errors, set input source:
+         --stdin read targets from stdin;
+         -t,--targets set targets, see -h;
+         -f,--input-file read from file with targets, see -h""")
+        exit(1)
 
 
 def get_async_writer(app_settings: AppConfig) -> Callable[[Any, str], Coroutine]:

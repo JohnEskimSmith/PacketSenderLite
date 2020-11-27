@@ -8,6 +8,8 @@ class AppConfig:
     senders: int
     queue_sleep: int
     statistics: bool
+    input_stdin: str
+    single_targets: str
     input_file: str
     output_file: str
     write_mode: str

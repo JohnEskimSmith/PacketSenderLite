@@ -14,6 +14,9 @@ def parse_args():
     parser.add_argument('-settings', type=str, help='path to file with settings (yaml)')
     parser.add_argument('-m', '--mode', dest='mode', type=str, default='single',
                         help='type of read mode from connections:single, multi (default: single)')
+    parser.add_argument('--stdin', dest='input_stdin', action='store_true', help='Read targets from stdin')
+    parser.add_argument('-t', '--targets', nargs='+', type=str, default='', dest='single_targets',
+                        help='Single targets: ipv4, CIDRs')
     parser.add_argument('-f', '--input-file', dest='input_file', type=str, help='path to file with targets')
     parser.add_argument('-o', '--output-file', dest='output_file', type=str, help='path to file with results')
     parser.add_argument('-s', '--senders', dest='senders', type=int, default=1024,
@@ -55,6 +58,13 @@ def parse_args():
 def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
     if args.settings:
         return parse_settings_file(args.settings)
+
+    if not args.input_stdin and not args.input_file and not args.single_targets:
+        print("""errors, set input source:
+         --stdin read targets from stdin;
+         -t,--targets set targets, see -h;
+         -f,--input-file read from file with targets, see -h""")
+        exit(1)
 
     payloads = []
     search_values = []
@@ -129,6 +139,8 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'queue_sleep': args.queue_sleep,
         'statistics': args.statistics,
         'input_file': input_file,
+        'input_stdin': args.input_stdin,
+        'single_targets': args.single_targets,
         'output_file': output_file,
         'write_mode': write_mode,
         'show_only_success': args.show_only_success
