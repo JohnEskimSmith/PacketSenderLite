@@ -21,9 +21,9 @@ def create_target_tcp_protocol(ip_str: str, target_config: TargetConfig) -> Iter
             yield Target(ip=ip_str, payload=payload, additions=additions, **kwargs)
     elif target_config.python_payloads:
         payloads_generator = get_generator(target_config)
-        for payload in payloads_generator(ip_str, kwargs):
-            payload = payload['payload']
-            additions = payload['data_payload']
+        for _payload in payloads_generator(ip_str, kwargs):
+            payload = _payload['payload']
+            additions = _payload['data_payload']
             yield Target(ip=ip_str, payload=payload, additions=additions, **kwargs)
     else:
         # No payload means 'just read the service banners'
