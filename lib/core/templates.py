@@ -77,17 +77,18 @@ def make_document_from_response(buffer: bytes, target: Target) -> dict:
             result['data']['tcp']['result']['response'][f'body_{algo}'] = hm.hexdigest()
     except Exception:
         pass
-    result['data']['tcp']['result']['response']['body_hexdump'] = ''
-    try:
-        # еще одно представление результата(байт)
-        # Transform binary data to the hex dump text format:
-        # 00000000: 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  .........
-        # для этого и необходим модуль hexdump
-        hdump = hexdump(buffer, result='return')
-        output = b64encode(bytes(hdump, 'utf-8')).decode('utf-8')
-        result['data']['tcp']['result']['response']['body_hexdump'] = output
-    except Exception:
-        pass
+    if not target.without_hexdump:
+        result['data']['tcp']['result']['response']['body_hexdump'] = ''
+        try:
+            # еще одно представление результата(байт)
+            # Transform binary data to the hex dump text format:
+            # 00000000: 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  .........
+            # для этого и необходим модуль hexdump
+            hdump = hexdump(buffer, result='return')
+            output = b64encode(bytes(hdump, 'utf-8')).decode('utf-8')
+            result['data']['tcp']['result']['response']['body_hexdump'] = output
+        except Exception:
+            pass
     result['ip'] = target.ip
     result['port'] = int(target.port)
     return result

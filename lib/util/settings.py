@@ -40,6 +40,8 @@ def parse_args():
                         help='trying to find a substring in a response bytes (set in bytes(hex))')
     parser.add_argument('--single-contain-string', dest='single_contain_string', type=str,
                         help='trying to find a substring in a response(set in str)')
+    parser.add_argument('--without-hexdump', dest='without_hexdump', action='store_true',
+                        help='without hexdump in result record')
     parser.add_argument('--show-only-success', dest='show_only_success', action='store_true')
     # endregion
     parser.add_argument('--list-payloads', nargs='*', dest='list_payloads',
@@ -132,6 +134,7 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'python_payloads': args.python_payloads,
         'generator_payloads': args.generator_payloads,
         'mode': args.mode,
+        'without_hexdump': args.without_hexdump
     })
 
     app_settings = AppConfig(**{

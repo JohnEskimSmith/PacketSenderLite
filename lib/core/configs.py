@@ -29,6 +29,7 @@ class TargetConfig:
     mode: str  # TODO: enum
     search_values: List[bytes]
     max_size: int
+    without_hexdump: bool
 
     def as_dict(self):
         return {
@@ -43,9 +44,11 @@ class TargetConfig:
             'mode': self.mode,
             'search_values': self.search_values,
             'max_size': self.max_size,
+            'without_hexdump': self.without_hexdump
         }
 
 
 Target = namedtuple('Target', ['port', 'ssl_check', 'conn_timeout', 'read_timeout', 'ssl_timeout', 'list_payloads',
-                               'python_payloads', 'generator_payloads', 'search_values', 'mode', 'max_size', 'ip',
+                               'python_payloads', 'generator_payloads', 'search_values', 'mode', 'max_size',
+                               'without_hexdump', 'ip',
                                'payload', 'additions'])
