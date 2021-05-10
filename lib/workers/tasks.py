@@ -306,16 +306,16 @@ class TargetWorker:
                         pass
             if result:
                 try:
-                    success = bool(access_dot_path(result, 'data.tcp.status'))
+                    success = access_dot_path(result, 'data.tcp.status')
                 except:
-                    success = False
+                    success = 'unknown-error'
                 try:
                     content_length = int(access_dot_path(result, 'data.tcp.result.response.content_length'))
                 except:
                     content_length = 0
 
                 if self.stats:
-                    if success == "success":
+                    if success == 'success':
                         self.stats.count_good += 1
                     else:
                         self.stats.count_error += 1
@@ -324,7 +324,7 @@ class TargetWorker:
                 line_out = None
                 try:
                     if self.success_only:
-                        if success == "success":
+                        if success == 'success':
                             line = result
                     else:
                         line = result
