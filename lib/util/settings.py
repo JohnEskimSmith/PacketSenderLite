@@ -42,6 +42,8 @@ def parse_args():
                         help='trying to find a substring in a response(set in str)')
     parser.add_argument('--without-hexdump', dest='without_hexdump', action='store_true',
                         help='without hexdump in result record')
+    parser.add_argument('--body-not-empty', dest='body_not_empty', action='store_true',
+                        help='if set, check that content_length > 0 (field "body_raw" not empty)')
     parser.add_argument('--show-only-success', dest='show_only_success', action='store_true')
     # endregion
     parser.add_argument('--list-payloads', nargs='*', dest='list_payloads',
@@ -146,7 +148,8 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'single_targets': args.single_targets,
         'output_file': output_file,
         'write_mode': write_mode,
-        'show_only_success': args.show_only_success
+        'show_only_success': args.show_only_success,
+        'body_not_empty': args.body_not_empty
     })
 
 

@@ -28,7 +28,11 @@ async def main():
 
     async with aiofiles_open(config.output_file, mode=config.write_mode) as file_with_results:
         writer_coroutine = get_async_writer(config)
-        target_worker = TargetWorker(statistics, task_semaphore, queue_prints, config.show_only_success)
+        target_worker = TargetWorker(statistics,
+                                     task_semaphore,
+                                     queue_prints,
+                                     config.show_only_success,
+                                     config.body_not_empty)
         input_reader: TargetReader = create_io_reader(statistics, queue_input, target_settings, config)
         task_producer = TaskProducer(statistics, queue_input, queue_tasks, target_worker)
         executor = Executor(statistics, queue_tasks, queue_prints)

@@ -211,11 +211,14 @@ class TargetWorker:
     Runs payload against target
     """
 
-    def __init__(self, stats: Stats, semaphore: asyncio.Semaphore, output_queue: asyncio.Queue, success_only: bool):
+    def __init__(self, stats: Stats, semaphore: asyncio.Semaphore, output_queue: asyncio.Queue,
+                 success_only: bool,
+                 body_not_empty: bool):
         self.stats = stats
         self.semaphore = semaphore
         self.output_queue = output_queue
         self.success_only = success_only
+        self.body_not_empty = body_not_empty
 
     # noinspection PyBroadException
     async def do(self, target: Target):
@@ -302,23 +305,41 @@ class TargetWorker:
                     except Exception:
                         pass
             if result:
-                success = access_dot_path(result, "data.tcp.status")
+                try:
+                    success = bool(access_dot_path(result, 'data.tcp.status'))
+                except:
+                    success = False
+                try:
+                    content_length = int(access_dot_path(result, 'data.tcp.result.response.content_length'))
+                except:
+                    content_length = 0
+
                 if self.stats:
                     if success == "success":
                         self.stats.count_good += 1
                     else:
                         self.stats.count_error += 1
+
                 line = None
+                line_out = None
                 try:
                     if self.success_only:
                         if success == "success":
-                            line = ujson_dumps(result)
+                            line = result
                     else:
-                        line = ujson_dumps(result)
+                        line = result
                 except Exception:
                     pass
+
                 if line:
-                    await self.output_queue.put(line)
+                    if self.body_not_empty:
+                        if content_length > 0:
+                            line_out = ujson_dumps(line)
+                    else:
+                        line_out = ujson_dumps(line)
+
+                if line_out:
+                    await self.output_queue.put(line_out)
 
 
 def create_io_reader(stats: Stats, queue_input: Queue, target: TargetConfig, app_config: AppConfig) -> TargetReader:

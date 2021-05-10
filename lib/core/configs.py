@@ -14,6 +14,7 @@ class AppConfig:
     output_file: str
     write_mode: str
     show_only_success: bool
+    body_not_empty: bool
 
 
 @dataclass(frozen=True)
