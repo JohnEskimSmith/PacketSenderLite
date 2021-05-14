@@ -15,6 +15,7 @@ class AppConfig:
     write_mode: str
     show_only_success: bool
     body_not_empty: bool
+    custom_module: str
 
 
 @dataclass(frozen=True)

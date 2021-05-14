@@ -14,6 +14,8 @@ def parse_args():
     parser.add_argument('-settings', type=str, help='path to file with settings (yaml)')
     parser.add_argument('-m', '--mode', dest='mode', type=str, default='single',
                         help='type of read mode from connections:single, multi (default: single)')
+    parser.add_argument('--module', dest='custom_module', type=str, default='default',
+                        help='set custom module(from modules)')
     parser.add_argument('--stdin', dest='input_stdin', action='store_true', help='Read targets from stdin')
     parser.add_argument('-t', '--targets', nargs='+', type=str, default='', dest='single_targets',
                         help='Single targets: ipv4, CIDRs')
@@ -149,7 +151,8 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'output_file': output_file,
         'write_mode': write_mode,
         'show_only_success': args.show_only_success,
-        'body_not_empty': args.body_not_empty
+        'body_not_empty': args.body_not_empty,
+        'custom_module': args.custom_module
     })
 
 
