@@ -8,16 +8,25 @@ __all__ = ['single_read', 'multi_read', 'write_to_stdout', 'write_to_file', 'dec
            'filter_bytes']
 
 
-async def single_read(reader: asyncio.StreamReader, target: Target) -> Tuple[bool, Any]:
+async def single_read(reader: asyncio.StreamReader,
+                      target: Target,
+                      custom_max_size: int = 0,
+                      operation_description: str = '') -> Tuple[bool, Any]:
     # region old
-    future_reader = reader.read(target.max_size)
+    if not custom_max_size:
+        future_reader = reader.read(target.max_size)
+    else:
+        future_reader = reader.read(custom_max_size)
     try:
         # через asyncio.wait_for - задаем время на чтение из
         # соединения
         data = await asyncio.wait_for(future_reader, timeout=target.read_timeout)
         return True, data
     except Exception as e:
-        result = create_error_template(target, str(e))
+        if not operation_description:
+            result = create_error_template(target, str(e))
+        else:
+            result = create_error_template(target, str(e), description=operation_description)
         return False, result
 
 
