@@ -18,6 +18,7 @@ def settings():
         'python_payloads': [],
         'generator_payloads': [],
         'mode': 'single',
+        'without_hexdump': False
     })
 
 
