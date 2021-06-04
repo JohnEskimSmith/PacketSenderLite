@@ -1,7 +1,9 @@
 async_timeout==3.0.1
 hexdump==3.3
-aioconsole
+aioconsole~=0.3.1
 uvloop==0.14.0
 ujson==1.35
-aiofiles
-cryptography==3.1
+aiofiles~=0.6.0
+cryptography~=2.8
+pymongo~=3.11.3
+pytest~=6.2.4

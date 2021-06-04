@@ -109,7 +109,7 @@ def get_op_msg(section: bytes) -> bytes:
     return out
 
 
-# copied function from zgrab2
+# copied function from zgrab2: getBuildInfoOpMsg
 # gleaned from tshark
 def get_build_info_op_msg() -> bytes:
     section_payload = bson_encode({"buildinfo": 1, "$db": "admin"})
