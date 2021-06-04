@@ -1,7 +1,7 @@
 async_timeout==3.0.1
 hexdump==3.3
-aioconsole==0.3.0
+aioconsole
 uvloop==0.14.0
 ujson==1.35
-aiofiles==0.5.0
+aiofiles
 cryptography==3.1

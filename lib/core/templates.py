@@ -1,6 +1,6 @@
 from base64 import b64encode
 from hashlib import sha256, sha1, md5
-
+from typing import Dict
 from hexdump import hexdump
 
 from .configs import Target
@@ -22,7 +22,7 @@ def create_result_template(target: Target) -> dict:
 def create_error_template(target: Target,
                           error_str: str,
                           description: str = ''
-                          ) -> dict:
+                          ) -> Dict:
     """
     Creates skeleton of error result dictionary
     """
@@ -52,7 +52,7 @@ def create_error_template(target: Target,
 
 
 # noinspection PyBroadException
-def make_document_from_response(buffer: bytes, target: Target) -> dict:
+def make_document_from_response(buffer: bytes, target: Target, addition_dict: Dict = None, protocol: str = '') -> dict:
     """
     Обработка результата чтения байт из соединения
     - buffer - байты полученные от сервиса(из соединения)
@@ -61,6 +61,8 @@ def make_document_from_response(buffer: bytes, target: Target) -> dict:
     """
 
     result = create_result_template(target)
+    if protocol:
+        result['data']['tcp']['protocol'] = protocol
     result['data']['tcp']['status'] = 'success'
     result['data']['tcp']['result']['response']['content_length'] = len(buffer)
     try:
@@ -68,10 +70,12 @@ def make_document_from_response(buffer: bytes, target: Target) -> dict:
     except BaseException:
         pass
     # region ADD DESC.
-    # отказался от попыток декодировать данные
-    # поля data.tcp.result.response.body - не будет, так лучше
+    # отказался от попыток декодировать данные.
+    # поля data.tcp.result.response.body - не будет сохранятся, так лучше
     # (в противном случае могут возникать проблемы при создании json
     # из данных с декодированным body)
+    # update: добавил аргумент addition_dict - в него писать dict - если что-то понадобится дополнительное
+    # не самый лучший вариант, но как "временное решение" - допустимо
     # try:
     #     _default_record['data']['tcp']['result']['response']['body'] = buffer.decode()
     # except Exception as e:
@@ -105,6 +109,12 @@ def make_document_from_response(buffer: bytes, target: Target) -> dict:
             result['data']['tcp']['result']['response']['body_hexdump'] = output
         except Exception:
             pass
+    if addition_dict:
+        if isinstance(addition_dict, dict):
+            try:
+                result['data']['tcp']['result']['response']['addition'] = addition_dict
+            except Exception:
+                pass
     result['ip'] = target.ip
     result['port'] = int(target.port)
     return result
