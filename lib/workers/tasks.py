@@ -5,7 +5,7 @@ from asyncio import Queue
 from base64 import b64encode
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
-from typing import Optional, Callable, Any, Coroutine
+from typing import Optional, Callable, Any, Coroutine, Dict
 
 from aioconsole import ainput
 from aiofiles import open as aiofiles_open
@@ -220,6 +220,44 @@ class TargetWorker:
         self.success_only = success_only
         self.body_not_empty = body_not_empty
 
+    async def send_result(self, result: Optional[Dict]):
+        if result:
+            try:
+                success = access_dot_path(result, 'data.tcp.status')
+            except:
+                success = 'unknown-error'
+            try:
+                content_length = int(access_dot_path(result, 'data.tcp.result.response.content_length'))
+            except:
+                content_length = 0
+
+            if self.stats:
+                if success == 'success':
+                    self.stats.count_good += 1
+                else:
+                    self.stats.count_error += 1
+
+            line = None
+            line_out = None
+            try:
+                if self.success_only:
+                    if success == 'success':
+                        line = result
+                else:
+                    line = result
+            except Exception:
+                pass
+
+            if line:
+                if self.body_not_empty:
+                    if content_length > 0:
+                        line_out = ujson_dumps(line)
+                else:
+                    line_out = ujson_dumps(line)
+
+            if line_out:
+                await self.output_queue.put(line_out)
+
     # noinspection PyBroadException
     async def do(self, target: Target):
         """
@@ -270,7 +308,7 @@ class TargetWorker:
                         status_data, data_or_error_result = await asyncio.wait_for(
                             multi_read(reader, target), timeout=target.read_timeout)
                     if status_data:
-                        check_filter = filter_bytes(data_or_error_result, target)
+                        check_filter: bool = filter_bytes(data_or_error_result, target)
                         if check_filter:
                             result = make_document_from_response(data_or_error_result, target)
                             if target.ssl_check:
@@ -304,42 +342,7 @@ class TargetWorker:
                         writer.close()
                     except Exception:
                         pass
-            if result:
-                try:
-                    success = access_dot_path(result, 'data.tcp.status')
-                except:
-                    success = 'unknown-error'
-                try:
-                    content_length = int(access_dot_path(result, 'data.tcp.result.response.content_length'))
-                except:
-                    content_length = 0
-
-                if self.stats:
-                    if success == 'success':
-                        self.stats.count_good += 1
-                    else:
-                        self.stats.count_error += 1
-
-                line = None
-                line_out = None
-                try:
-                    if self.success_only:
-                        if success == 'success':
-                            line = result
-                    else:
-                        line = result
-                except Exception:
-                    pass
-
-                if line:
-                    if self.body_not_empty:
-                        if content_length > 0:
-                            line_out = ujson_dumps(line)
-                    else:
-                        line_out = ujson_dumps(line)
-
-                if line_out:
-                    await self.output_queue.put(line_out)
+            await self.send_result(result)
 
 
 def create_io_reader(stats: Stats, queue_input: Queue, target: TargetConfig, app_config: AppConfig) -> TargetReader:

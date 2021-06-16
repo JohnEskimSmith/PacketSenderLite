@@ -36,7 +36,7 @@ async def main():
                                          config.body_not_empty)
         else:
             try:
-                module_name = f'lib.modules.{config.custom_module}'
+                module_name = f'lib.modules.{config.custom_module}.{config.custom_module}'
                 _mod = importlib.import_module(module_name)
                 CustomWorker = getattr(_mod, 'CustomWorker')
                 target_worker = CustomWorker(statistics,
@@ -45,7 +45,7 @@ async def main():
                                              config.show_only_success,
                                              config.body_not_empty)
             except Exception as e:
-                print(f'exit, error: {str(e)}')
+                print(f'exit, error: {e}')
                 exit(1)
 
         input_reader: TargetReader = create_io_reader(statistics, queue_input, target_settings, config)
