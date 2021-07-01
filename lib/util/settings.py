@@ -27,12 +27,12 @@ def parse_args():
                         help='Sleep duration if the queue is full, default 1 sec. Queue size == senders')
     parser.add_argument('--max-size', dest='max_size', type=int, default=1024,
                         help='Maximum total bytes(!) to read for a single host (default 1024)')
-    parser.add_argument('-tconnect', '--timeout-connection', dest='conn_timeout', type=int, default=7,
-                        help='Set connection timeout for open_connection, seconds (default: 7)')
-    parser.add_argument('-tread', '--timeout-read', dest='read_timeout', type=int, default=7,
-                        help='Set connection timeout for reader from connection, seconds (default: 7)')
-    parser.add_argument('-tssl', '--timeout-ssl', dest='ssl_timeout', type=int, default=7,
-                        help='Set connection timeout for reader from ssl connection, seconds (default: 7)')
+    parser.add_argument('-tconnect', '--timeout-connection', dest='conn_timeout', type=int, default=8,
+                        help='Set connection timeout for open_connection, seconds (default: 8)')
+    parser.add_argument('-tread', '--timeout-read', dest='read_timeout', type=int, default=8,
+                        help='Set connection timeout for reader from connection, seconds (default: 8)')
+    parser.add_argument('-tssl', '--timeout-ssl', dest='ssl_timeout', type=int, default=8,
+                        help='Set connection timeout for reader from ssl connection, seconds (default: 8)')
     parser.add_argument('-p', '--port', type=int, help='Specify port (default: 80)', default=80, required=True)
     parser.add_argument('--use-ssl', dest='ssl_check', action='store_true')
     # region filters

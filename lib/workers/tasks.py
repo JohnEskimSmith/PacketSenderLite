@@ -289,13 +289,27 @@ class TargetWorker:
                     except BaseException:
                         pass
             except Exception as e:
+                try:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except:
+                        pass
+                except:
+                    pass
+
                 await asyncio.sleep(0.005)
                 try:
                     future_connection.close()
                     del future_connection
                 except Exception as e:
                     pass
-                result = create_error_template(target, str(e))
+                error_str = ''
+                try:
+                    error_str = e.strerror
+                except:
+                    pass
+                result = create_error_template(target, error_str, type(e).__name__)
             else:
                 try:
                     status_data = False
@@ -329,10 +343,14 @@ class TargetWorker:
                         result = data_or_error_result  # get errors
                     try:
                         writer.close()
+                        try:
+                            await writer.wait_closed()
+                        except:
+                            pass
                     except BaseException:
                         pass
                 except Exception as e:
-                    result = create_error_template(target, str(e))
+                    result = create_error_template(target, type(e).__name__, type(e).__name__)
                     try:
                         future_connection.close()
                     except Exception:
@@ -340,6 +358,10 @@ class TargetWorker:
                     await asyncio.sleep(0.005)
                     try:
                         writer.close()
+                        try:
+                            await writer.wait_closed()
+                        except:
+                            pass
                     except Exception:
                         pass
             await self.send_result(result)

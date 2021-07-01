@@ -10,7 +10,7 @@ from lib.core import Target, load_python_generator_payloads_from_file, TargetCon
 
 def create_target_tcp_protocol(ip_str: str, target_config: TargetConfig) -> Iterator[Target]:
     """
-    На основании ip адреса и настроек возвращает через yield экзэмпляр Target.
+    На основании ip адреса и настроек возвращает через yield экземпляр Target.
     Каждый экземпляр Target содержит всю необходимую информацию(настройки и параметры) для функции worker.
     """
     kwargs = target_config.as_dict()

@@ -23,7 +23,7 @@ async def single_read(reader: asyncio.StreamReader,
         data = await asyncio.wait_for(future_reader, timeout=target.read_timeout)
         return True, data
     except Exception as e:
-        result = create_error_template(target, str(e), description=operation_description)
+        result = create_error_template(target, type(e).__name__, description=operation_description)
         return False, result
 
 
