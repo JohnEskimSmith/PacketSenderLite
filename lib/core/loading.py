@@ -41,11 +41,11 @@ def load_python_generator_payloads_from_file(py_module_path: str, _name_function
             _path_to_file = Path(py_module_path)
         else:
             _path_to_file = Path(__file__).parent / py_module_path
-        try:
-            if _path_to_file.exists() and _path_to_file.is_file():
-                return payload_generator_from_py_file(_path_to_file, _name_function)
-        except Exception:
-            pass
+        # try:
+        if _path_to_file.exists() and _path_to_file.is_file():
+            return payload_generator_from_py_file(_path_to_file, _name_function)
+        # except Exception:
+        #     pass
     else:
         try:
             return payload_generator_from_py_module(py_module_path, _name_function)
