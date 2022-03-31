@@ -53,9 +53,12 @@ async def main():
         executor = Executor(statistics, queue_tasks, queue_prints)
         printer = OutputPrinter(config.output_file, statistics, queue_prints, file_with_results, writer_coroutine)
 
-        await asyncio.wait([
-            worker.run() for worker in [input_reader, task_producer, executor, printer]
-        ])
+        # await asyncio.wait([
+        #     worker.run() for worker in [input_reader, task_producer, executor, printer]
+        # ])
+        running_tasks = [asyncio.create_task(worker.run())
+                         for worker in [input_reader, task_producer, executor, printer]]
+        await asyncio.wait(running_tasks)
 
 if __name__ == '__main__':
     uvloop.install()

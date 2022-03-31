@@ -26,29 +26,29 @@ def create_error_template(target: Target,
     """
     Creates skeleton of error result dictionary
     """
-    if not description:
-        return {
-            'ip': target.ip,
-            'port': target.port,
-            'data': {
-                'tcp': {
-                    'status': 'unknown-error',
-                    'error': error_str
-                }
+    # if not description:
+    #     return {
+    #         'ip': target.ip,
+    #         'port': target.port,
+    #         'data': {
+    #             'tcp': {
+    #                 'status': 'unknown-error',
+    #                 'error': error_str
+    #             }
+    #         }
+    #     }
+    # else:
+    return {
+        'ip': target.ip,
+        'port': target.port,
+        'data': {
+            'tcp': {
+                'status': 'unknown-error',
+                'error': error_str,
+                'description': description
             }
         }
-    else:
-        return {
-            'ip': target.ip,
-            'port': target.port,
-            'data': {
-                'tcp': {
-                    'status': 'unknown-error',
-                    'error': error_str,
-                    'description': description
-                }
-            }
-        }
+    }
 
 
 # noinspection PyBroadException
