@@ -1,6 +1,6 @@
-from ipaddress import ip_network, ip_address
+from ipaddress import ip_address, ip_network
 
-__all__ = ['is_ip', 'is_network']
+__all__ = ["is_ip", "is_network"]
 
 
 def is_ip(ip_str: str) -> bool:

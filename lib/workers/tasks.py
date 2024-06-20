@@ -3,24 +3,51 @@ import asyncio
 from abc import ABC
 from asyncio import Queue
 from base64 import b64encode
+
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
-from typing import Optional, Callable, Any, Coroutine, Dict
+from typing import Any, Callable, Coroutine, Dict, Optional
 
 from aioconsole import ainput
 from aiofiles import open as aiofiles_open
 from ujson import dumps as ujson_dumps
 
-from lib.core import convert_bytes_to_cert, create_error_template, make_document_from_response, Stats, AppConfig, \
-    Target, TargetConfig
-from lib.util import access_dot_path, is_ip, is_network, single_read, multi_read, \
-    filter_bytes, write_to_file, write_to_stdout
+from lib.core import (
+    AppConfig,
+    Stats,
+    Target,
+    TargetConfig,
+    convert_bytes_to_cert,
+    create_error_template,
+    make_document_from_response,
+)
+from lib.util import (
+    access_dot_path,
+    filter_bytes,
+    is_ip,
+    is_network,
+    multi_read,
+    single_read,
+    write_to_file,
+    write_to_stdout,
+)
+
 from .factories import create_targets_tcp_protocol
 
-__all__ = ['QueueWorker', 'TargetReader', 'TargetFileReader', 'TargetStdinReader', 'TaskProducer', 'Executor',
-           'OutputPrinter', 'TargetWorker', 'create_io_reader', 'get_async_writer']
+__all__ = [
+    "QueueWorker",
+    "TargetReader",
+    "TargetFileReader",
+    "TargetStdinReader",
+    "TaskProducer",
+    "Executor",
+    "OutputPrinter",
+    "TargetWorker",
+    "create_io_reader",
+    "get_async_writer",
+]
 
-STOP_SIGNAL = b'check for end'
+STOP_SIGNAL = b"check for end"
 
 
 class QueueWorker(metaclass=abc.ABCMeta):
@@ -37,7 +64,14 @@ class InputProducer:
     Produces raw messages for workers
     """
 
-    def __init__(self, stats: Stats, input_queue: Queue, target_conf: TargetConfig, send_limit: int, queue_sleep: int):
+    def __init__(
+        self,
+        stats: Stats,
+        input_queue: Queue,
+        target_conf: TargetConfig,
+        send_limit: int,
+        queue_sleep: int,
+    ):
         self.stats = stats
         self.input_queue = input_queue
         self.target_conf = target_conf
@@ -80,12 +114,14 @@ class TargetFileReader(TargetReader):
     Reads raw input messages from text file
     """
 
-    def __init__(self, stats: Stats, input_queue: Queue, producer: InputProducer, file_path: str):
+    def __init__(
+        self, stats: Stats, input_queue: Queue, producer: InputProducer, file_path: str
+    ):
         super().__init__(stats, input_queue, producer)
         self.file_path = file_path
 
     async def run(self):
-        async with aiofiles_open(self.file_path, mode='rt') as f:
+        async with aiofiles_open(self.file_path, mode="rt") as f:
             async for line in f:
                 linein = line.strip()
                 await self.producer.send(linein)
@@ -98,7 +134,13 @@ class TargetSingleReader(TargetReader):
     Reads --target input messages from args
     """
 
-    def __init__(self, stats: Stats, input_queue: Queue, producer: InputProducer, single_targets: str):
+    def __init__(
+        self,
+        stats: Stats,
+        input_queue: Queue,
+        producer: InputProducer,
+        single_targets: str,
+    ):
         super().__init__(stats, input_queue, producer)
         self.single_targets = single_targets
 
@@ -136,7 +178,9 @@ class TaskProducer(QueueWorker):
     Creates tasks for tasks queue
     """
 
-    def __init__(self, stats: Stats, in_queue: Queue, tasks_queue: Queue, worker: 'TargetWorker'):
+    def __init__(
+        self, stats: Stats, in_queue: Queue, tasks_queue: Queue, worker: "TargetWorker"
+    ):
         super().__init__(stats)
         self.in_queue = in_queue
         self.tasks_queue = tasks_queue
@@ -181,7 +225,9 @@ class OutputPrinter(QueueWorker):
     Takes results from results queue and put them to output
     """
 
-    def __init__(self, output_file:str, stats: Stats, in_queue: Queue, io, async_writer) -> None:
+    def __init__(
+        self, output_file: str, stats: Stats, in_queue: Queue, io, async_writer
+    ) -> None:
         super().__init__(stats)
         self.in_queue = in_queue
         self.async_writer = async_writer
@@ -199,11 +245,11 @@ class OutputPrinter(QueueWorker):
         await asyncio.sleep(0.5)
         if self.stats:
             statistics = self.stats.dict()
-            if self.output_file == '/dev/stdout':
-                await self.io.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
+            if self.output_file == "/dev/stdout":
+                await self.io.write(ujson_dumps(statistics).encode("utf-8") + b"\n")
             else:
-                async with aiofiles_open('/dev/stdout', mode='wb') as stats:
-                    await stats.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
+                async with aiofiles_open("/dev/stdout", mode="wb") as stats:
+                    await stats.write(ujson_dumps(statistics).encode("utf-8") + b"\n")
 
 
 class TargetWorker:
@@ -211,9 +257,14 @@ class TargetWorker:
     Runs payload against target
     """
 
-    def __init__(self, stats: Stats, semaphore: asyncio.Semaphore, output_queue: asyncio.Queue,
-                 success_only: bool,
-                 body_not_empty: bool):
+    def __init__(
+        self,
+        stats: Stats,
+        semaphore: asyncio.Semaphore,
+        output_queue: asyncio.Queue,
+        success_only: bool,
+        body_not_empty: bool,
+    ):
         self.stats = stats
         self.semaphore = semaphore
         self.output_queue = output_queue
@@ -223,16 +274,18 @@ class TargetWorker:
     async def send_result(self, result: Optional[Dict]):
         if result:
             try:
-                success = access_dot_path(result, 'data.tcp.status')
+                success = access_dot_path(result, "data.tcp.status")
             except:
-                success = 'unknown-error'
+                success = "unknown-error"
             try:
-                content_length = int(access_dot_path(result, 'data.tcp.result.response.content_length'))
+                content_length = int(
+                    access_dot_path(result, "data.tcp.result.response.content_length")
+                )
             except:
                 content_length = 0
 
             if self.stats:
-                if success == 'success':
+                if success == "success":
                     self.stats.count_good += 1
                 else:
                     self.stats.count_error += 1
@@ -241,7 +294,7 @@ class TargetWorker:
             line_out = None
             try:
                 if self.success_only:
-                    if success == 'success':
+                    if success == "success":
                         line = result
                 else:
                     line = result
@@ -268,23 +321,28 @@ class TargetWorker:
             certificate_dict = None
             cert_bytes_base64 = None
 
-            if target.ssl_check:  # если при запуске в настройках указано --use-ssl - то контекст ssl
+            if (
+                target.ssl_check
+            ):  # если при запуске в настройках указано --use-ssl - то контекст ssl
                 ssl_context = ssl_create_unverified_context()
                 future_connection = asyncio.open_connection(
                     target.ip,
                     target.port,
                     ssl=ssl_context,
-                    ssl_handshake_timeout=target.ssl_timeout)
+                    ssl_handshake_timeout=target.ssl_timeout,
+                )
             else:
                 future_connection = asyncio.open_connection(target.ip, target.port)
             try:
-                reader, writer = await asyncio.wait_for(future_connection, timeout=target.conn_timeout)
+                reader, writer = await asyncio.wait_for(
+                    future_connection, timeout=target.conn_timeout
+                )
                 if target.ssl_check:
                     try:
                         # noinspection PyProtectedMember
-                        _sub_ssl = writer._transport.get_extra_info('ssl_object')
+                        _sub_ssl = writer._transport.get_extra_info("ssl_object")
                         cert_bytes = _sub_ssl.getpeercert(binary_form=True)
-                        cert_bytes_base64 = b64encode(cert_bytes).decode('utf-8')
+                        cert_bytes_base64 = b64encode(cert_bytes).decode("utf-8")
                         certificate_dict = convert_bytes_to_cert(cert_bytes)
                     except BaseException:
                         pass
@@ -304,7 +362,7 @@ class TargetWorker:
                     del future_connection
                 except Exception as e:
                     pass
-                error_str = ''
+                error_str = ""
                 try:
                     error_str = e.strerror
                 except:
@@ -313,26 +371,46 @@ class TargetWorker:
             else:
                 try:
                     status_data = False
-                    if target.payload:  # если указан payload - то он и отправляется в первую очередь
+                    if (
+                        target.payload
+                    ):  # если указан payload - то он и отправляется в первую очередь
                         writer.write(target.payload)
                         await writer.drain()
-                    if target.mode == 'single':
-                        status_data, data_or_error_result = await single_read(reader, target)
-                    elif target.mode == 'multi':
+                    if target.mode == "single":
+                        status_data, data_or_error_result = await single_read(
+                            reader, target
+                        )
+                    elif target.mode == "multi":
                         status_data, data_or_error_result = await asyncio.wait_for(
-                            multi_read(reader, target), timeout=target.read_timeout)
+                            multi_read(reader, target), timeout=target.read_timeout
+                        )
                     if status_data:
                         check_filter: bool = filter_bytes(data_or_error_result, target)
                         if check_filter:
-                            result = make_document_from_response(data_or_error_result, target)
+                            result = make_document_from_response(
+                                data_or_error_result, target
+                            )
                             if target.ssl_check:
                                 if cert_bytes_base64:
-                                    result['data']['tcp']['result']['response']['request']['tls_log']['handshake_log'][
-                                        'server_certificates']['certificate']['raw'] = cert_bytes_base64
+                                    result["data"]["tcp"]["result"]["response"][
+                                        "request"
+                                    ]["tls_log"]["handshake_log"][
+                                        "server_certificates"
+                                    ][
+                                        "certificate"
+                                    ][
+                                        "raw"
+                                    ] = cert_bytes_base64
                                 if certificate_dict:
-                                    result['data']['tcp']['result']['response']['request']['tls_log'][
-                                        'handshake_log'][
-                                        'server_certificates']['certificate']['parsed'] = certificate_dict
+                                    result["data"]["tcp"]["result"]["response"][
+                                        "request"
+                                    ]["tls_log"]["handshake_log"][
+                                        "server_certificates"
+                                    ][
+                                        "certificate"
+                                    ][
+                                        "parsed"
+                                    ] = certificate_dict
 
                         else:
                             # TODO: добавить статус success-not-contain для обозначения того,
@@ -350,7 +428,9 @@ class TargetWorker:
                     except BaseException:
                         pass
                 except Exception as e:
-                    result = create_error_template(target, type(e).__name__, type(e).__name__)
+                    result = create_error_template(
+                        target, type(e).__name__, type(e).__name__
+                    )
                     try:
                         future_connection.close()
                     except Exception:
@@ -367,24 +447,34 @@ class TargetWorker:
             await self.send_result(result)
 
 
-def create_io_reader(stats: Stats, queue_input: Queue, target: TargetConfig, app_config: AppConfig) -> TargetReader:
-    message_producer = InputProducer(stats, queue_input, target, app_config.senders - 1, app_config.queue_sleep)
+def create_io_reader(
+    stats: Stats, queue_input: Queue, target: TargetConfig, app_config: AppConfig
+) -> TargetReader:
+    message_producer = InputProducer(
+        stats, queue_input, target, app_config.senders - 1, app_config.queue_sleep
+    )
     if app_config.input_stdin:
         return TargetStdinReader(stats, queue_input, message_producer)
     if app_config.single_targets:
-        return TargetSingleReader(stats, queue_input, message_producer, app_config.single_targets)
+        return TargetSingleReader(
+            stats, queue_input, message_producer, app_config.single_targets
+        )
     elif app_config.input_file:
-        return TargetFileReader(stats, queue_input, message_producer, app_config.input_file)
+        return TargetFileReader(
+            stats, queue_input, message_producer, app_config.input_file
+        )
     else:
         # TODO : rethink...
-        print("""errors, set input source:
+        print(
+            """errors, set input source:
          --stdin read targets from stdin;
          -t,--targets set targets, see -h;
-         -f,--input-file read from file with targets, see -h""")
+         -f,--input-file read from file with targets, see -h"""
+        )
         exit(1)
 
 
 def get_async_writer(app_settings: AppConfig) -> Callable[[Any, str], Coroutine]:
-    if app_settings.write_mode == 'a':
+    if app_settings.write_mode == "a":
         return write_to_file
     return write_to_stdout

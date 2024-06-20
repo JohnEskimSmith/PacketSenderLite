@@ -35,22 +35,38 @@ class TargetConfig:
 
     def as_dict(self):
         return {
-            'port': self.port,
-            'ssl_check': self.ssl_check,
-            'conn_timeout': self.conn_timeout,
-            'read_timeout': self.read_timeout,
-            'ssl_timeout': self.ssl_timeout,
-            'list_payloads': self.list_payloads,
-            'python_payloads': self.python_payloads,
-            'generator_payloads': self.generator_payloads,
-            'mode': self.mode,
-            'search_values': self.search_values,
-            'max_size': self.max_size,
-            'without_hexdump': self.without_hexdump
+            "port": self.port,
+            "ssl_check": self.ssl_check,
+            "conn_timeout": self.conn_timeout,
+            "read_timeout": self.read_timeout,
+            "ssl_timeout": self.ssl_timeout,
+            "list_payloads": self.list_payloads,
+            "python_payloads": self.python_payloads,
+            "generator_payloads": self.generator_payloads,
+            "mode": self.mode,
+            "search_values": self.search_values,
+            "max_size": self.max_size,
+            "without_hexdump": self.without_hexdump,
         }
 
 
-Target = namedtuple('Target', ['port', 'ssl_check', 'conn_timeout', 'read_timeout', 'ssl_timeout', 'list_payloads',
-                               'python_payloads', 'generator_payloads', 'search_values', 'mode', 'max_size',
-                               'without_hexdump', 'ip',
-                               'payload', 'additions'])
+Target = namedtuple(
+    "Target",
+    [
+        "port",
+        "ssl_check",
+        "conn_timeout",
+        "read_timeout",
+        "ssl_timeout",
+        "list_payloads",
+        "python_payloads",
+        "generator_payloads",
+        "search_values",
+        "mode",
+        "max_size",
+        "without_hexdump",
+        "ip",
+        "payload",
+        "additions",
+    ],
+)

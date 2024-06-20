@@ -1,17 +1,24 @@
 import importlib
 from os import path, pathsep
 from pathlib import Path
-from typing import Callable, Iterable, Generator, Optional
+from typing import Callable, Generator, Iterable, Optional
 
-__all__ = ['payload_generator_from_py_module', 'payload_generator_from_py_file',
-           'load_python_generator_payloads_from_file', 'filter_files', 'return_payloads_from_files',
-           'PayloadGenerator']
+__all__ = [
+    "payload_generator_from_py_module",
+    "payload_generator_from_py_file",
+    "load_python_generator_payloads_from_file",
+    "filter_files",
+    "return_payloads_from_files",
+    "PayloadGenerator",
+]
 
 
 PayloadGenerator = Callable[[str, dict], Iterable]  # Payloads factory for given IP
 
 
-def payload_generator_from_py_module(module_name: str, function_name: str) -> PayloadGenerator:
+def payload_generator_from_py_module(
+    module_name: str, function_name: str
+) -> PayloadGenerator:
     """
     Imports generator function from required module
     """
@@ -20,23 +27,29 @@ def payload_generator_from_py_module(module_name: str, function_name: str) -> Pa
 
 
 # noinspection PyUnresolvedReferences
-def payload_generator_from_py_file(py_module_path, function_name: str) -> PayloadGenerator:
+def payload_generator_from_py_file(
+    py_module_path, function_name: str
+) -> PayloadGenerator:
     """
     Imports generator function from single .py file
     """
-    module_name_like_filename_py = str(py_module_path).rstrip('.py')
-    spec = importlib.util.spec_from_file_location(module_name_like_filename_py, py_module_path)
+    module_name_like_filename_py = str(py_module_path).rstrip(".py")
+    spec = importlib.util.spec_from_file_location(
+        module_name_like_filename_py, py_module_path
+    )
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return getattr(m, function_name)
 
 
 # noinspection PyBroadException
-def load_python_generator_payloads_from_file(py_module_path: str, _name_function: str) -> Optional[PayloadGenerator]:
+def load_python_generator_payloads_from_file(
+    py_module_path: str, _name_function: str
+) -> Optional[PayloadGenerator]:
     """
     Imports generator from python file OR module
     """
-    if py_module_path.endswith('.py'):
+    if py_module_path.endswith(".py"):
         if pathsep in py_module_path:
             _path_to_file = Path(py_module_path)
         else:
@@ -60,11 +73,13 @@ def filter_files(payload_files: Iterable[str]) -> Generator[str, None, None]:
     return (path_to_file for path_to_file in payload_files if path.isfile(path_to_file))
 
 
-def return_payloads_from_files(payload_files: Iterable[str]) -> Generator[bytes, None, None]:
+def return_payloads_from_files(
+    payload_files: Iterable[str],
+) -> Generator[bytes, None, None]:
     """
     Yields byte payloads from given files
     """
     for payloadfile in filter_files(payload_files):
-        with open(payloadfile, 'rb') as f:
+        with open(payloadfile, "rb") as f:
             payload = f.read()
             yield payload
